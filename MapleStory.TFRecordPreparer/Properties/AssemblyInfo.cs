@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("MapleStory_TFRecord_Preparer")]
+[assembly: AssemblyTitle("MapleStory.TFRecordPreparer")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("GITHUB.COM/CHARLESCAO460")]
