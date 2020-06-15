@@ -2,11 +2,11 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyTitle("MapleStory.TFRecordPreparer")]
+[assembly: AssemblyTitle("MapleStory.Common.Properties")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyProduct("MapleStory_TFRecord_Preparer")]
+[assembly: AssemblyProduct("MapleStory.Common.Properties")]
 
 [assembly: ComVisible(false)]
-[assembly: Guid("5b0e37ac-c560-4fc9-8388-4c8d1a1f4806")]
+[assembly: Guid("89fd60c7-2be1-42fc-a247-e95ba45ee622")]
 

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using CommandLine;
 using CommandLine.Text;
 using MapleStory.Common;
+using MapRender.Invoker;
 
 namespace MapleStory.TFRecordPreparer
 {
@@ -22,7 +23,7 @@ namespace MapleStory.TFRecordPreparer
         private class Options
         {
             [Option('m', "map", Required = true, HelpText = "Space-separated Wz image ID of map(s) used for generating TFRecord.")]
-            public IEnumerable<int> Maps { get; set; }
+            public IEnumerable<string> Maps { get; set; }
 
             [Option('x', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
             public int RenderWidth { get; set; }
@@ -32,6 +33,9 @@ namespace MapleStory.TFRecordPreparer
 
             [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
             public string MapleStoryPath { get; set; }
+
+            [Option('e', "encoding", Required = false, HelpText = "Encoding used to decode Wz strings. Using system default if not specified.")]
+            public string Encoding { get; set; } = "";
         }
 
         private static int Main(string[] args)
@@ -50,13 +54,28 @@ namespace MapleStory.TFRecordPreparer
             return -1;
         }
 
+        /// <summary>
+        /// Main logic here
+        /// </summary>
         private static int RunAndReturn(Options options)
         {
+            // Print program info
             Console.WriteLine(HeadingInfo.Default);
             Console.WriteLine(FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).LegalCopyright);
+            // Check arguments
             PreRunTest(options);
             Console.WriteLine("MapleStory Location: {0}", options.MapleStoryPath);
-
+            // Initialize render
+            MapRenderInvoker renderInvoker = new MapRenderInvoker(options.MapleStoryPath,
+                options.Encoding == string.Empty ? Encoding.Default : Encoding.GetEncoding(options.Encoding),
+                false);
+            // Iterate each map
+            foreach (var map in options.Maps)
+            {
+                string imgText = map.EndsWith(".img") ? map : (map + ".img");
+                renderInvoker.LoadMap(imgText);
+                renderInvoker.Launch();
+            }
             return 0;
         }
 
@@ -66,6 +85,7 @@ namespace MapleStory.TFRecordPreparer
         /// </summary>
         private static void PreRunTest(Options options)
         {
+            // Check resolution
             if (options.RenderHeight <= 0 || options.RenderHeight > System.Windows.SystemParameters.WorkArea.Height)
             {
                 throw new ArgumentException("Render size cannot exceed screen size. Height illegal.",
@@ -77,6 +97,7 @@ namespace MapleStory.TFRecordPreparer
                     nameof(options.RenderWidth));
             }
 
+            // Check file path
             if (options.MapleStoryPath == string.Empty)
             {
                 if (MapleStoryPathHelper.FoundMapleStoryInstalled)
@@ -91,6 +112,26 @@ namespace MapleStory.TFRecordPreparer
             else if (!Directory.Exists(options.MapleStoryPath))
             {
                 throw new ArgumentException("Supplied MapleStory directory does not exist.");
+            }
+
+            // Check map id format
+            foreach (var map in options.Maps)
+            {
+                string id = map.Replace(".img", string.Empty);
+                if (!id.All(char.IsDigit))
+                {
+                    throw new ArgumentException("Supplied Map Id is not in correct format." +
+                                                " --map parameter should be space-separated list of IDs. " +
+                                                "E.g. --map 450007010 450007060");
+                }
+            }
+
+            // Check encoding
+            if ((options.Encoding != string.Empty) &&
+                Encoding.GetEncodings()
+                .Any(e => e.Name.Equals(options.Encoding, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new ArgumentException($"{options.Encoding} is not an available Encoding in your system.");
             }
         }
 

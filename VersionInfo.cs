@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 
 // Version information for an assembly consists of the following four values:
 //
@@ -12,3 +12,8 @@ using System.Reflection;
 // [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion("0.1.0.0")]
 [assembly: AssemblyFileVersion("0.1.0.0")]
+
+[assembly: AssemblyCompany("GITHUB.COM/CHARLESCAO460")]
+[assembly: AssemblyCopyright("Copyright CHARLESCAO460 © 2020")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]

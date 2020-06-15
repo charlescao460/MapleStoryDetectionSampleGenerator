@@ -33,7 +33,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
+    <OutputPath>..\bin\Debug\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -42,7 +42,7 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
+    <OutputPath>..\bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
@@ -74,6 +74,10 @@
     <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj">
       <Project>{f85ca8f5-e0a7-488d-b0ba-30a768a53183}</Project>
       <Name>MapleStory.Common</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MapRender.Invoker\MapRender.Invoker.csproj">
+      <Project>{c0e98c89-1f24-4b2a-923e-9ac9e464de9b}</Project>
+      <Name>MapRender.Invoker</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
