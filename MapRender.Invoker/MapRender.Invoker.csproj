@@ -35,6 +35,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\WzComparerR2\References\Bass.Net.dll</HintPath>
     </Reference>
+    <Reference Include="EmptyKeys.UserInterface, Version=2.6.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\WzComparerR2\References\EmptyKeys.UserInterface.dll</HintPath>
+    </Reference>
     <Reference Include="MonoGame.Framework">
       <HintPath>..\WzComparerR2\References\MonoGame.Framework.dll</HintPath>
     </Reference>
@@ -51,6 +55,7 @@
     <Compile Include="..\VersionInfo.cs">
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
+    <Compile Include="MapRender.cs" />
     <Compile Include="MapRenderInvoker.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -80,8 +85,10 @@
       <Name>WzComparerR2</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>xcopy "$(ProjectDir)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\*" "$(TargetDir)" /I /Y /S</PostBuildEvent>
+    <PostBuildEvent>xcopy "$(ProjectDir)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\*" "$(TargetDir)" /I /Y /S
+</PostBuildEvent>
   </PropertyGroup>
 </Project>

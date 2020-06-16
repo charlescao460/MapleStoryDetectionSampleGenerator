@@ -82,7 +82,7 @@ namespace MapleStory.TFRecordPreparer
             {
                 string imgText = map.EndsWith(".img") ? map : (map + ".img");
                 renderInvoker.LoadMap(imgText);
-                renderInvoker.Launch();
+                renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
             }
             return 0;
         }

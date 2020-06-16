@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MapleStory.Common;
+using Microsoft.Xna.Framework;
 using Un4seen.Bass;
 using WzComparerR2.Common;
 using WzComparerR2.MapRender;
@@ -16,52 +17,12 @@ using WzComparerR2.WzLib;
 
 namespace MapRender.Invoker
 {
-    public abstract class MapRenderInvokerBase
-    {
-        static MapRenderInvokerBase()
-        {
-            // We must initialize bass.dll here
-            Console.WriteLine(@"###########Copyright info from bass.dll###########");
-            Bass.BASS_Init(-1, 44100, BASSInit.BASS_DEVICE_DEFAULT, System.IntPtr.Zero);
-        }
-
-        protected readonly Wz_Structure _wzStructure;
-        protected MapRenderInvokerBase(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
-        {
-            // Static settings for Wz_Structure :(
-            Wz_Structure.DefaultAutoDetectExtFiles = true;
-            Wz_Structure.DefaultEncoding = encoding;
-            Wz_Structure.DefaultImgCheckDisabled = disableImgCheck;
-            // Then our constructor
-            string baseWzPath = Path.Combine(mapleStoryPath, MapleStoryPathHelper.MapleStoryBaseWzName);
-            if (!File.Exists(baseWzPath))
-            {
-                throw new ArgumentException($"Cannot find {MapleStoryPathHelper.MapleStoryBaseWzName} in given directory {mapleStoryPath}.");
-            }
-            _wzStructure = new Wz_Structure();
-            _wzStructure.Load(baseWzPath);
-        }
-
-        /// <summary>
-        /// Load specified Wz map img to this invoker.
-        /// </summary>
-        /// <param name="imgText">The map node text to search. E.g. "450007010.img" </param>
-        /// <exception cref="MapleStory.Common.Exceptions.WzImgNotFoundException">If supplied img cannot be found.</exception>
-        public abstract void LoadMap(string imgText);
-
-        /// <summary>
-        /// Lunch map render. Make sure we have loaded img.
-        /// </summary>
-        public abstract void Launch();
-
-    }
-
     public class MapRenderInvoker : MapRenderInvokerBase
     {
         private Wz_Image _currentMapImage;
         private StringLinker _stringLinker;
         private Thread _renderThread;
-        private FrmMapRender2 _mapRender;
+        private MapRender _mapRender;
 
         public MapRenderInvoker(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
             : base(mapleStoryPath, encoding, disableImgCheck)
@@ -102,21 +63,24 @@ namespace MapRender.Invoker
             _stringLinker.Load(PluginManager.FindWz(Wz_Type.String).GetValueEx<Wz_File>(null));
         }
 
-        ///<inheritdoc/>
-        public override void Launch()
+        /// <inheritdoc/>
+        public override void Launch(int width, int height)
         {
             if (_currentMapImage == null)
             {
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
             }
+
             _renderThread = new Thread(() =>
             {
-                _mapRender = new FrmMapRender2(_currentMapImage) { StringLinker = _stringLinker };
+                _mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
                 _mapRender.Window.Title = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileName;
                 try
                 {
                     using (_mapRender)
                     {
+                        _mapRender.RunOneFrame(); // Initialize
+                        _mapRender.ChangeResolution(width, height);
                         _mapRender.Run();
                     }
                 }
@@ -128,6 +92,7 @@ namespace MapRender.Invoker
             _renderThread.SetApartmentState(ApartmentState.STA);
             _renderThread.IsBackground = true;
             _renderThread.Start();
+
             while (true)
             {
                 // Block
@@ -234,5 +199,48 @@ namespace MapRender.Invoker
             e.WzNode = null;
         }
         #endregion
+    }
+
+    public abstract class MapRenderInvokerBase
+    {
+        static MapRenderInvokerBase()
+        {
+            // We must initialize bass.dll here
+            Console.WriteLine(@"###########Copyright info from bass.dll###########");
+            Bass.BASS_Init(-1, 44100, BASSInit.BASS_DEVICE_DEFAULT, System.IntPtr.Zero);
+        }
+
+        protected readonly Wz_Structure _wzStructure;
+
+        protected MapRenderInvokerBase(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
+        {
+            // Static settings for Wz_Structure :(
+            Wz_Structure.DefaultAutoDetectExtFiles = true;
+            Wz_Structure.DefaultEncoding = encoding;
+            Wz_Structure.DefaultImgCheckDisabled = disableImgCheck;
+            // Then our constructor
+            string baseWzPath = Path.Combine(mapleStoryPath, MapleStoryPathHelper.MapleStoryBaseWzName);
+            if (!File.Exists(baseWzPath))
+            {
+                throw new ArgumentException($"Cannot find {MapleStoryPathHelper.MapleStoryBaseWzName} in given directory {mapleStoryPath}.");
+            }
+            _wzStructure = new Wz_Structure();
+            _wzStructure.Load(baseWzPath);
+        }
+
+        /// <summary>
+        /// Load specified Wz map img to this invoker.
+        /// </summary>
+        /// <param name="imgText">The map node text to search. E.g. "450007010.img" </param>
+        /// <exception cref="MapleStory.Common.Exceptions.WzImgNotFoundException">If supplied img cannot be found.</exception>
+        public abstract void LoadMap(string imgText);
+
+        /// <summary>
+        /// Lunch map render. Make sure we have loaded img.
+        /// </summary>
+        /// <param name="width">Width of resolution</param>
+        /// <param name="height">Height of resolution</param>
+        public abstract void Launch(int width, int height);
+
     }
 }
