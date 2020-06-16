@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using CommandLine;
@@ -15,9 +16,15 @@ namespace MapleStory.TFRecordPreparer
 {
     internal static class MainEntryPoint
     {
+        [DllImport("kernel32.dll")]
+        static extern bool SetDllDirectory(string path);
+
         static MainEntryPoint()
         {
             Console.OutputEncoding = Encoding.UTF8; // Correctly show non-English characters
+            string libPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib",
+                Environment.Is64BitProcess ? "x64" : "x86");
+            SetDllDirectory(libPath); // Add dll search path for WzComparerR2
         }
 
         private class Options
@@ -38,6 +45,7 @@ namespace MapleStory.TFRecordPreparer
             public string Encoding { get; set; } = "";
         }
 
+        [STAThread]
         private static int Main(string[] args)
         {
             int ret = CommandLine.Parser.Default.ParseArguments<Options>(args).MapResult(RunAndReturn, OnParseError);
