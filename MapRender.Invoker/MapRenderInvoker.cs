@@ -9,7 +9,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using MapleStory.Common;
 using Microsoft.Xna.Framework;
-using Un4seen.Bass;
 using WzComparerR2.Common;
 using WzComparerR2.MapRender;
 using WzComparerR2.PluginBase;
@@ -231,12 +230,6 @@ namespace MapRender.Invoker
 
     public abstract class MapRenderInvokerBase
     {
-        static MapRenderInvokerBase()
-        {
-            // We must initialize bass.dll here
-            Console.WriteLine(@"###########Copyright info from bass.dll###########");
-            Bass.BASS_Init(-1, 44100, BASSInit.BASS_DEVICE_DEFAULT, System.IntPtr.Zero);
-        }
 
         protected readonly Wz_Structure _wzStructure;
 
