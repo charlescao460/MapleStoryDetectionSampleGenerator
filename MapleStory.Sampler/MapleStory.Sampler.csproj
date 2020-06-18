@@ -32,9 +32,15 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="protobuf-net, Version=2.4.0.0, Culture=neutral, PublicKeyToken=257b51d87d2e4d67, processorArchitecture=MSIL">
+      <HintPath>..\packages\protobuf-net.2.4.6\lib\net40\protobuf-net.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.ServiceModel" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -47,6 +53,8 @@
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="protobuf\Example.cs" />
+    <Compile Include="protobuf\Feature.cs" />
     <Compile Include="Sampler.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -55,5 +63,17 @@
       <Name>MapRender.Invoker</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <None Include="packages.config" />
+    <None Include="protobuf\example.proto" />
+    <None Include="protobuf\feature.proto" />
+    <None Include="protobuf\README.md" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>cd $(ProjectDir)protobuf
+$(ProjectDir)..\Tools\protogen\protogen.exe --csharp_out=.\  feature.proto
+$(ProjectDir)..\Tools\protogen\protogen.exe --csharp_out=.\  example.proto</PreBuildEvent>
+  </PropertyGroup>
 </Project>
