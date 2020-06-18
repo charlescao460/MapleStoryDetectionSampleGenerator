@@ -18,7 +18,7 @@ namespace MapRender.Invoker
         public Sampler(MapRenderInvoker renderInvoker)
         {
             _renderInvoker = renderInvoker;
-            if (renderInvoker.Render == null)
+            if (!renderInvoker.IsRunning)
             {
                 throw new NullReferenceException("Sampler must have a lunched render!");
             }
@@ -27,14 +27,16 @@ namespace MapRender.Invoker
         public string SampleSingle()
         {
             MemoryStream stream = new MemoryStream();
-            _renderInvoker.Render.TakeScreenShot(stream);
+            var items = _renderInvoker.TakeScreenShot(stream);
             string ret = Guid.NewGuid().ToString() + ".png";
-            SaveScreenShot(stream,ret);
+            SaveScreenShot(stream, ret);
             return ret;
         }
 
+
         public List<string> SampleAll(int xStep, int yStep)
         {
+            //TODO
             return null;
         }
 
@@ -54,7 +56,7 @@ namespace MapRender.Invoker
             {
                 EncoderParameter parameter = new EncoderParameter(Encoder.Quality, JPEG_RATIO);
                 parameters.Param[0] = parameter;
-                result.Save(path,jpegCodecInfo,parameters);
+                result.Save(path, jpegCodecInfo, parameters);
             }
         }
 

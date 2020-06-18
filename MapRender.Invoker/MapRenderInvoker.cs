@@ -25,12 +25,11 @@ namespace MapRender.Invoker
         private MapRender _mapRender;
         private Camera _camera;
 
+        public bool IsRunning { get; private set; }
+
         public int ScreenWidth { private set; get; }
 
         public int ScreenHeight { private set; get; }
-
-        //TODO: Do not expose this to other class
-        internal MapRender Render => _mapRender;
 
         public int WorldWidth => _camera.WorldRect.Width;
 
@@ -87,7 +86,7 @@ namespace MapRender.Invoker
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
             }
 
-            bool isReady = false;
+            IsRunning = false;
             _renderThread = new Thread(() =>
             {
                 _mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
@@ -98,7 +97,7 @@ namespace MapRender.Invoker
                     {
                         _mapRender.RunOneFrame(); // Initialize
                         _mapRender.ChangeResolution(width, height);
-                        isReady = true;
+                        IsRunning = true;
                         _camera = _mapRender.renderEnv.Camera;
                         _mapRender.Run();
                     }
@@ -114,13 +113,18 @@ namespace MapRender.Invoker
             _renderThread.IsBackground = true;
             _renderThread.Start();
 
-            while (!isReady) ; // Wait until ready
+            while (!IsRunning) ; // Wait until ready
         }
 
         public void MoveCamera(int centerX, int centerY)
         {
             _camera.Center = new Vector2(centerX,centerY);
             _camera.AdjustToWorldRect();
+        }
+
+        public List<TargetItem> TakeScreenShot(Stream stream)
+        {
+            return _mapRender.TakeScreenShot(stream);
         }
 
         #region COPIED_CODE
