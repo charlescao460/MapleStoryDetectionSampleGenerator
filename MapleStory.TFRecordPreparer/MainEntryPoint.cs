@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using CommandLine;
 using CommandLine.Text;
@@ -78,12 +79,35 @@ namespace MapleStory.TFRecordPreparer
                 options.Encoding == string.Empty ? Encoding.Default : Encoding.GetEncoding(options.Encoding),
                 false);
             // Iterate each map
-            foreach (var map in options.Maps)
+            var map = options.Maps.First();
+            string imgText = map.EndsWith(".img") ? map : (map + ".img");
+            renderInvoker.LoadMap(imgText);
+            renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
+
+            int lastX;
+            bool reverse = false;
+            long timer = 0;
+            const int step = 5;
+            bool took = false;
+            while (true) // block
             {
-                string imgText = map.EndsWith(".img") ? map : (map + ".img");
-                renderInvoker.LoadMap(imgText);
-                renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
+                Thread.Sleep(step);
+                lastX = renderInvoker.CurrentCameraX;
+                renderInvoker.MoveCamera(renderInvoker.CurrentCameraX + (reverse ? 1 : -1), renderInvoker.CurrentCameraY);
+                if (renderInvoker.CurrentCameraX == lastX)
+                {
+                    reverse = !reverse;
+                }
+
+                timer += step;
+                if (timer >= 2000 && !took)
+                {
+                    Sampler sampler = new Sampler(renderInvoker);
+                    sampler.SampleSingle();
+                    took = true;
+                }
             }
+
             return 0;
         }
 

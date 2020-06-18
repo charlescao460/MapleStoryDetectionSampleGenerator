@@ -23,6 +23,22 @@ namespace MapRender.Invoker
         private StringLinker _stringLinker;
         private Thread _renderThread;
         private MapRender _mapRender;
+        private Camera _camera;
+
+        public int ScreenWidth { private set; get; }
+
+        public int ScreenHeight { private set; get; }
+
+        //TODO: Do not expose this to other class
+        internal MapRender Render => _mapRender;
+
+        public int WorldWidth => _camera.WorldRect.Width;
+
+        public int WorldHeight => _camera.WorldRect.Height;
+
+        public int CurrentCameraX => (int)_camera.Center.X;
+
+        public int CurrentCameraY => (int) _camera.Center.Y;
 
         public MapRenderInvoker(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
             : base(mapleStoryPath, encoding, disableImgCheck)
@@ -34,7 +50,7 @@ namespace MapRender.Invoker
         /// Attach event handler to PlugManager, let it throw if reflection fail so we know there are changes in WzComparerR2
         /// </summary>
         /// <seealso cref="WzComparerR2.PluginBase.PluginManager.WzFileFinding"/>
-        public void AddFindWzEventHandler()
+        private void AddFindWzEventHandler()
         {
             EventInfo findWzEvent = typeof(PluginManager)
                 .GetEvent("WzFileFinding", BindingFlags.Static | BindingFlags.NonPublic);
@@ -71,6 +87,7 @@ namespace MapRender.Invoker
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
             }
 
+            bool isReady = false;
             _renderThread = new Thread(() =>
             {
                 _mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
@@ -81,6 +98,8 @@ namespace MapRender.Invoker
                     {
                         _mapRender.RunOneFrame(); // Initialize
                         _mapRender.ChangeResolution(width, height);
+                        isReady = true;
+                        _camera = _mapRender.renderEnv.Camera;
                         _mapRender.Run();
                     }
                 }
@@ -89,14 +108,19 @@ namespace MapRender.Invoker
                     _mapRender = null;
                 }
             });
+            ScreenHeight = height;
+            ScreenWidth = width;
             _renderThread.SetApartmentState(ApartmentState.STA);
             _renderThread.IsBackground = true;
             _renderThread.Start();
 
-            while (true)
-            {
-                // Block
-            }
+            while (!isReady) ; // Wait until ready
+        }
+
+        public void MoveCamera(int centerX, int centerY)
+        {
+            _camera.Center = new Vector2(centerX,centerY);
+            _camera.AdjustToWorldRect();
         }
 
         #region COPIED_CODE
