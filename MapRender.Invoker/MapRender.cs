@@ -81,12 +81,10 @@ namespace MapRender.Invoker
                 {
                     if (item is LifeItem life)
                     {
-                        if (life.View.Animator is StateMachineAnimator animator)
+                        var rectangle = this.GetLifeBoundingBox(life);
+                        if (rectangle.HasValue)
                         {
-                            var data = (StateMachineAnimator.FrameStateMachineData)animator.Data;
-                            IDictionary<string, RepeatableFrameAnimationData> dict = data.Data;
-                            Rectangle rectangle = data.FrameAnimator.CurrentFrame.Rectangle;
-                            itemsOnMap.Add(new TargetItem(life, rectangle, RenderObjectType.Mob) { Id = life.ID });
+                            itemsOnMap.Add(new TargetItem(life, rectangle.Value, RenderObjectType.Mob) { Id = life.ID });
                         }
                     }
                 }
