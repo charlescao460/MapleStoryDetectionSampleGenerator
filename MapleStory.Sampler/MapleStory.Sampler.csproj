@@ -52,10 +52,12 @@
     <Compile Include="..\VersionInfo.cs">
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
+    <Compile Include="ObjectClass.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="protobuf\Example.cs" />
     <Compile Include="protobuf\Feature.cs" />
     <Compile Include="Sampler.cs" />
+    <Compile Include="TfExample.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MapRender.Invoker\MapRender.Invoker.csproj">

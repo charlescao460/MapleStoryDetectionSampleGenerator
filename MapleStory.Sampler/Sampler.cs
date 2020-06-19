@@ -13,7 +13,7 @@ namespace MapRender.Invoker
     public class Sampler
     {
         private const long JPEG_RATIO = 90L;
-        private MapRenderInvoker _renderInvoker;
+        private readonly MapRenderInvoker _renderInvoker;
 
         public Sampler(MapRenderInvoker renderInvoker)
         {
@@ -28,9 +28,8 @@ namespace MapRender.Invoker
         {
             MemoryStream stream = new MemoryStream();
             var items = _renderInvoker.TakeScreenShot(stream);
-            string ret = Guid.NewGuid().ToString() + ".png";
-            SaveScreenShot(stream, ret);
-            return ret;
+            EncodeScreenShot(stream);
+            return "";
         }
 
 
@@ -40,7 +39,7 @@ namespace MapRender.Invoker
             return null;
         }
 
-        private void SaveScreenShot(Stream screenShotStream, string path)
+        private Stream EncodeScreenShot(Stream screenShotStream)
         {
             Bitmap source = new Bitmap(screenShotStream);
             Bitmap result = new Bitmap(_renderInvoker.ScreenWidth, _renderInvoker.ScreenHeight);
@@ -50,14 +49,16 @@ namespace MapRender.Invoker
                 graphics.Clear(Color.Black);
                 graphics.DrawImageUnscaledAndClipped(source, rectangle);
             }
-
+            MemoryStream ret = new MemoryStream();
             ImageCodecInfo jpegCodecInfo = ImageCodecInfo.GetImageEncoders().First(i => i.MimeType == "image/jpeg");
             using (EncoderParameters parameters = new EncoderParameters(1))
             {
                 EncoderParameter parameter = new EncoderParameter(Encoder.Quality, JPEG_RATIO);
                 parameters.Param[0] = parameter;
-                result.Save(path, jpegCodecInfo, parameters);
+                result.Save(ret, jpegCodecInfo, parameters);
             }
+
+            return ret;
         }
 
 

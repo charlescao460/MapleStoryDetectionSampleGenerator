@@ -55,6 +55,7 @@
     </Compile>
     <Compile Include="MapRender.cs" />
     <Compile Include="MapRenderInvoker.cs" />
+    <Compile Include="ObjectClass.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="TargetItem.cs" />
   </ItemGroup>

@@ -18,7 +18,7 @@ namespace MapRender.Invoker
 
         public int Y { get; set; }
 
-        public RenderObjectType Type { get; set; }
+        public ObjectClass Type { get; set; }
 
         public int Width { get; set; }
 
@@ -43,7 +43,25 @@ namespace MapRender.Invoker
 
         public TargetItem(SceneItem item, Rectangle rectangle, RenderObjectType type) : this(item, rectangle)
         {
-            Type = type;
+            Type = RenderTypeToObjectClass(type);
+        }
+
+        public static ObjectClass RenderTypeToObjectClass(RenderObjectType type)
+        {
+            switch (type)
+            {
+                case RenderObjectType.Mob:
+                    return ObjectClass.Mob;
+                case RenderObjectType.Foothold:
+                    return ObjectClass.Foothold;
+                case RenderObjectType.Npc:
+                    return ObjectClass.Npc;
+                case RenderObjectType.LadderRope:
+                    return ObjectClass.LadderRope;
+                case RenderObjectType.Portal:
+                    return ObjectClass.CrossMapPortal; //TODO: Classify portal
+            }
+            return ObjectClass.Unknown;
         }
 
     }
