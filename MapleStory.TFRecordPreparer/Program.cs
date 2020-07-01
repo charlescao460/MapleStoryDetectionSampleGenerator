@@ -15,12 +15,12 @@ using MapRender.Invoker;
 
 namespace MapleStory.TFRecordPreparer
 {
-    internal static class MainEntryPoint
+    internal static class Program
     {
         [DllImport("kernel32.dll")]
         static extern bool SetDllDirectory(string path);
 
-        static MainEntryPoint()
+        static Program()
         {
             Console.OutputEncoding = Encoding.UTF8; // Correctly show non-English characters
             string libPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib",
@@ -88,24 +88,24 @@ namespace MapleStory.TFRecordPreparer
             bool reverse = false;
             long timer = 0;
             const int step = 5;
-            bool took = false;
+            bool took = true;
             while (true) // block
             {
-                Thread.Sleep(step);
-                lastX = renderInvoker.CurrentCameraX;
-                renderInvoker.MoveCamera(renderInvoker.CurrentCameraX + (reverse ? 1 : -1), renderInvoker.CurrentCameraY);
-                if (renderInvoker.CurrentCameraX == lastX)
-                {
-                    reverse = !reverse;
-                }
+                //Thread.Sleep(step);
+                //lastX = renderInvoker.CurrentCameraX;
+                //renderInvoker.MoveCamera(renderInvoker.CurrentCameraX + (reverse ? 1 : -1), renderInvoker.CurrentCameraY);
+                //if (renderInvoker.CurrentCameraX == lastX)
+                //{
+                //    reverse = !reverse;
+                //}
 
-                timer += step;
-                if (timer >= 2000 && !took)
-                {
-                    Sampler sampler = new Sampler(renderInvoker);
-                    sampler.SampleSingle();
-                    took = true;
-                }
+                //timer += step;
+                //if (timer >= 2000 && !took)
+                //{
+                //    Sampler sampler = new Sampler(renderInvoker);
+                //    sampler.SampleSingle();
+                //    took = true;
+                //}
             }
 
             return 0;
