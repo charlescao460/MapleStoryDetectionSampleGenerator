@@ -121,7 +121,7 @@ namespace MapRender.Invoker
             _camera.AdjustToWorldRect();
         }
 
-        public List<TargetItem> TakeScreenShot(Stream stream)
+        public ScreenShotData TakeScreenShot(Stream stream)
         {
             return _mapRender.TakeScreenShot(stream);
         }

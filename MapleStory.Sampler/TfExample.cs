@@ -41,6 +41,8 @@ namespace MapleStory.Sampler
         private float _sampleWidth;
         private float _sampleHeight;
 
+        public Guid Guid { get; private set; }
+
         private TfExample(MemoryStream imageStream, int width, int height, int itemCount)
         {
             _underlyingExample = new Example();
@@ -49,6 +51,7 @@ namespace MapleStory.Sampler
             _featureMap = _features.feature;
             _sampleHeight = height;
             _sampleWidth = width;
+            Guid = Guid.NewGuid();
 
             _minXList = new List<float>(itemCount);
             _minYList = new List<float>(itemCount);
@@ -61,9 +64,9 @@ namespace MapleStory.Sampler
             _featureMap[KeyHeight] = NewInt64Feature(height);
             _featureMap[KeyWidth] = NewInt64Feature(width);
             _featureMap[KeyEncoded] = NewBytesFeature(imageStream.ToArray());
-            var guid = Guid.NewGuid().ToString();
-            _featureMap[KeyFileName] = NewBytesFeature(guid);
-            _featureMap[KeySourceId] = NewBytesFeature(guid);
+            var guidString = Guid.ToString();
+            _featureMap[KeyFileName] = NewBytesFeature(guidString);
+            _featureMap[KeySourceId] = NewBytesFeature(guidString);
         }
 
         public static TfExample From(MemoryStream imageStream, IEnumerable<TargetItem> items, int width, int height)

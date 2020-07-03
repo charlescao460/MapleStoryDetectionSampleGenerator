@@ -17,7 +17,7 @@ namespace MapRender.Invoker
     internal class MapRender : FrmMapRender2
     {
         private Stream _screenShotStream;
-        private List<TargetItem> _itemsOnMap;
+        private ScreenShotData _screenShotData;
 
         public MapRender(Wz_Image img) : base(img)
         {
@@ -35,12 +35,12 @@ namespace MapRender.Invoker
             engine.Renderer.ResetNativeSize();
         }
 
-        public List<TargetItem> TakeScreenShot(Stream file)
+        public ScreenShotData TakeScreenShot(Stream file)
         {
             _screenShotStream = file;
-            while (_screenShotStream != null) ; //Wait next Draw()
-            var ret = _itemsOnMap;
-            _itemsOnMap = null;
+            while (_screenShotStream != null) ; //Wait next Draw(), yield to GetScreenShotMapData()
+            var ret = _screenShotData;
+            _screenShotData = null;
             return ret;
         }
 
@@ -49,8 +49,8 @@ namespace MapRender.Invoker
             if (_screenShotStream != null)
             {
                 ScreenShotHelper(_screenShotStream, gameTime);
-                _itemsOnMap = new List<TargetItem>();
-                GetScreenShotMapData(mapData.Scene, ref _itemsOnMap);
+                _screenShotData = new ScreenShotData(new List<TargetItem>(), this.renderEnv.Camera.ClipRect);
+                GetScreenShotMapData(mapData.Scene, ref _screenShotData);
                 _screenShotStream = null;
             }
             base.Draw(gameTime);
@@ -71,10 +71,12 @@ namespace MapRender.Invoker
             this.tooltip.Draw(gameTime, renderEnv);
             GraphicsDevice.SetRenderTargets(oldTarget);
             target.SaveAsPng(destination, width, height);
+            
         }
 
-        private void GetScreenShotMapData(SceneNode node, ref List<TargetItem> itemsOnMap)
+        private void GetScreenShotMapData(SceneNode node, ref ScreenShotData screenShotData)
         {
+            var itemsOnMap = screenShotData.Items;
             if (node is ContainerNode container)
             {
                 foreach (var item in container.Slots)
@@ -93,7 +95,7 @@ namespace MapRender.Invoker
             {
                 for (int i = 0, total = node.Nodes.Count; i < total; ++i)
                 {
-                    GetScreenShotMapData(node.Nodes[i], ref itemsOnMap);
+                    GetScreenShotMapData(node.Nodes[i], ref screenShotData);
                 }
             }
         }

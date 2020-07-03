@@ -88,24 +88,27 @@ namespace MapleStory.TFRecordPreparer
             bool reverse = false;
             long timer = 0;
             const int step = 5;
-            bool took = true;
+            bool took = false;
             while (true) // block
             {
-                //Thread.Sleep(step);
-                //lastX = renderInvoker.CurrentCameraX;
-                //renderInvoker.MoveCamera(renderInvoker.CurrentCameraX + (reverse ? 1 : -1), renderInvoker.CurrentCameraY);
-                //if (renderInvoker.CurrentCameraX == lastX)
-                //{
-                //    reverse = !reverse;
-                //}
+                Thread.Sleep(step);
+                lastX = renderInvoker.CurrentCameraX;
+                renderInvoker.MoveCamera(renderInvoker.CurrentCameraX + (reverse ? 1 : -1), renderInvoker.CurrentCameraY);
+                if (renderInvoker.CurrentCameraX == lastX)
+                {
+                    reverse = !reverse;
+                }
 
-                //timer += step;
-                //if (timer >= 2000 && !took)
-                //{
-                //    Sampler sampler = new Sampler(renderInvoker);
-                //    sampler.SampleSingle();
-                //    took = true;
-                //}
+                timer += step;
+                if (timer >= 2000 && !took)
+                {
+                    Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
+                    var tfExample = sampler.SampleSingle();
+                    FileStream file = new FileStream(tfExample.Guid.ToString()+".example",FileMode.CreateNew);
+                    tfExample.SerializeToStream().WriteTo(file);
+                    file.Dispose();
+                    took = true;
+                }
             }
 
             return 0;
