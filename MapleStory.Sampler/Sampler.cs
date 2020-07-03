@@ -30,13 +30,12 @@ namespace MapleStory.Sampler
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
-            EncodeScreenShot(stream);
+            stream = EncodeScreenShot(stream);
             var items = FilterTargetsInCamera(screenShotData);
             int width = screenShotData.CameraRectangle.Width;
             int height = screenShotData.CameraRectangle.Height;
             return TfExample.From(stream, items, width, height);
         }
-
 
         public List<string> SampleAll(int xStep, int yStep)
         {
@@ -44,7 +43,7 @@ namespace MapleStory.Sampler
             return null;
         }
 
-        private Stream EncodeScreenShot(Stream screenShotStream)
+        private MemoryStream EncodeScreenShot(Stream screenShotStream)
         {
             Bitmap source = new Bitmap(screenShotStream);
             Bitmap result = new Bitmap(_renderInvoker.ScreenWidth, _renderInvoker.ScreenHeight);

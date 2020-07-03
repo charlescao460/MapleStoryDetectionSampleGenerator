@@ -35,9 +35,13 @@ namespace MapRender.Invoker
             engine.Renderer.ResetNativeSize();
         }
 
-        public ScreenShotData TakeScreenShot(Stream file)
+        /// <summary>
+        /// Take Screen, save image to stream, and return items info on the entire map.
+        /// </summary>
+        /// <param name="stream">Stream to save image</param>
+        public ScreenShotData TakeScreenShot(Stream stream)
         {
-            _screenShotStream = file;
+            _screenShotStream = stream;
             while (_screenShotStream != null) ; //Wait next Draw(), yield to GetScreenShotMapData()
             var ret = _screenShotData;
             _screenShotData = null;
@@ -46,6 +50,7 @@ namespace MapRender.Invoker
 
         protected override void Draw(GameTime gameTime)
         {
+            base.Draw(gameTime);
             if (_screenShotStream != null)
             {
                 ScreenShotHelper(_screenShotStream, gameTime);
@@ -53,7 +58,6 @@ namespace MapRender.Invoker
                 GetScreenShotMapData(mapData.Scene, ref _screenShotData);
                 _screenShotStream = null;
             }
-            base.Draw(gameTime);
         }
 
         private void ScreenShotHelper(Stream destination, GameTime gameTime)

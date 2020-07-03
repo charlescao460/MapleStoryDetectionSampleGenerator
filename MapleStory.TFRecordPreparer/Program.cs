@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using CommandLine;
 using CommandLine.Text;
 using MapleStory.Common;
+using MapleStory.Sampler;
 using MapRender.Invoker;
 
 namespace MapleStory.TFRecordPreparer
@@ -104,9 +105,9 @@ namespace MapleStory.TFRecordPreparer
                 {
                     Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
                     var tfExample = sampler.SampleSingle();
-                    FileStream file = new FileStream(tfExample.Guid.ToString()+".example",FileMode.CreateNew);
-                    tfExample.SerializeToStream().WriteTo(file);
-                    file.Dispose();
+                    TfRecordWriter writer = new TfRecordWriter(tfExample.Guid.ToString());
+                    writer.Write(tfExample);
+                    writer.Dispose();
                     took = true;
                 }
             }

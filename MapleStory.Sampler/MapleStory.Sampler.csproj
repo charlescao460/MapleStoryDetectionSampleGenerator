@@ -60,6 +60,7 @@
     <Compile Include="protobuf\Feature.cs" />
     <Compile Include="Sampler.cs" />
     <Compile Include="TfExample.cs" />
+    <Compile Include="TfRecordWriter.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MapRender.Invoker\MapRender.Invoker.csproj">
