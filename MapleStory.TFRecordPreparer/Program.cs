@@ -52,6 +52,9 @@ namespace MapleStory.TFRecordPreparer
             [Option('h', "height", Required = false, Default = 768, HelpText = "Height of sample image.")]
             public int RenderHeight { get; set; }
 
+            [Option('i', "interval", Required = false, Default = 0, HelpText = "Time interval between each sample")]
+            public int SampleInterval { get; set; }
+
             [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
             public string MapleStoryPath { get; set; }
 
@@ -108,7 +111,7 @@ namespace MapleStory.TFRecordPreparer
                 writer = new TfRecordWriter(options.OutputPath + "/" + map);
             }
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-            sampler.SampleAll(options.StepX, options.StepY, writer, 200);
+            sampler.SampleAll(options.StepX, options.StepY, writer, options.SampleInterval);
             writer.Finish();
             return 0;
         }
@@ -172,6 +175,12 @@ namespace MapleStory.TFRecordPreparer
             if (!Directory.Exists(options.OutputPath))
             {
                 throw new ArgumentException($"OutputPath {options.OutputPath} does not exist.");
+            }
+
+            // Check interval
+            if (options.SampleInterval < 0)
+            {
+                throw new ArgumentException("SampleInterval cannot be negative!");
             }
         }
 
