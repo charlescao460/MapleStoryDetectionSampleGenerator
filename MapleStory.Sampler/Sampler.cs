@@ -106,15 +106,18 @@ namespace MapleStory.Sampler
                 double itemArea = i.Height * i.Width;
                 int inCameraWidth = (i.X < 0 ? i.X + i.Width : i.Width) % camRectangle.Width;
                 int inCameraHeight = (i.Y < 0 ? i.Y + i.Height : i.Height) % camRectangle.Height;
+                inCameraWidth = (inCameraWidth + i.X) > camRectangle.Width ? (camRectangle.Width - i.X) : inCameraWidth;
+                inCameraHeight = (inCameraHeight + i.Y) > camRectangle.Height ? (camRectangle.Height - i.Y) : inCameraHeight;
                 double inCameraArea = inCameraHeight * inCameraWidth;
 
-                if (inCameraArea / itemArea >= ITEM_PARTIAL_AREA_THRESHOLD)
+                if (inCameraArea / itemArea >= ITEM_PARTIAL_AREA_THRESHOLD
+                    && i.X < camRectangle.Width
+                    && i.Y < camRectangle.Height)
                 {
                     i.Height = inCameraHeight;
                     i.Width = inCameraWidth;
                     i.X = i.X < 0 ? 0 : i.X;
                     i.Y = i.Y < 0 ? 0 : i.Y;
-
                     ret.Add(i);
                 }
             });

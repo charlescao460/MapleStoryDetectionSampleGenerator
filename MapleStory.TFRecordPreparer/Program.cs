@@ -43,6 +43,9 @@ namespace MapleStory.TFRecordPreparer
             [Option('o', "output", Required = false, Default = ".", HelpText = "Data set output location")]
             public string OutputPath { get; set; }
 
+            [Option('d', "darknet", Required = false, Default = false, HelpText = "Output to Darknet YOLO dataset.")]
+            public bool DarkNet { get; set; }
+
             [Option('w', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
             public int RenderWidth { get; set; }
 
@@ -95,9 +98,18 @@ namespace MapleStory.TFRecordPreparer
             renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
 
             // Do sampling!
-            TfRecordWriter writer = new TfRecordWriter(map);
+            IDatasetWriter writer;
+            if (options.DarkNet)
+            {
+                writer = new DarknetWriter(options.OutputPath);
+            }
+            else
+            {
+                writer = new TfRecordWriter(options.OutputPath + "/" + map);
+            }
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
             sampler.SampleAll(options.StepX, options.StepY, writer, 200);
+            writer.Finish();
             return 0;
         }
 

@@ -91,6 +91,12 @@ namespace MapleStory.Sampler
             return (uint)(((crc >> 15) | (crc << 17)) + 0xa282ead8UL);
         }
 
+        public void Finish()
+        {
+            // Not needed for TfRecord.
+            return;
+        }
+
         public void Dispose()
         {
             _fileStream?.Dispose();

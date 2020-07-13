@@ -55,6 +55,7 @@
     <Compile Include="..\VersionInfo.cs">
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
+    <Compile Include="DarknetWriter.cs" />
     <Compile Include="Sample.cs" />
     <Compile Include="IDatasetWriter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

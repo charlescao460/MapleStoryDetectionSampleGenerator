@@ -9,5 +9,7 @@ namespace MapleStory.Sampler
     public interface IDatasetWriter
     {
         void Write(Sample sample);
+
+        void Finish();
     }
 }
