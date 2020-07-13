@@ -23,8 +23,9 @@ namespace MapRender.Invoker
         private Thread _renderThread;
         private MapRender _mapRender;
         private Camera _camera;
+        private volatile bool _isRunning;
 
-        public bool IsRunning { get; private set; }
+        public bool IsRunning => _isRunning;
 
         public int ScreenWidth { private set; get; }
 
@@ -40,11 +41,12 @@ namespace MapRender.Invoker
 
         public int CurrentCameraX => (int)_camera.Center.X;
 
-        public int CurrentCameraY => (int) _camera.Center.Y;
+        public int CurrentCameraY => (int)_camera.Center.Y;
 
         public MapRenderInvoker(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
             : base(mapleStoryPath, encoding, disableImgCheck)
         {
+            _isRunning = false;
             AddFindWzEventHandler();
         }
 
@@ -89,7 +91,7 @@ namespace MapRender.Invoker
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
             }
 
-            IsRunning = false;
+            _isRunning = false;
             _renderThread = new Thread(() =>
             {
                 _mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
@@ -100,7 +102,7 @@ namespace MapRender.Invoker
                     {
                         _mapRender.RunOneFrame(); // Initialize
                         _mapRender.ChangeResolution(width, height);
-                        IsRunning = true;
+                        _isRunning = true;
                         _camera = _mapRender.renderEnv.Camera;
                         _mapRender.Run();
                     }
@@ -116,12 +118,12 @@ namespace MapRender.Invoker
             _renderThread.IsBackground = true;
             _renderThread.Start();
 
-            while (!IsRunning) ; // Wait until ready
+            while (!_isRunning) ; // Wait until ready
         }
 
         public void MoveCamera(int centerX, int centerY)
         {
-            _camera.Center = new Vector2(centerX,centerY);
+            _camera.Center = new Vector2(centerX, centerY);
             _camera.AdjustToWorldRect();
         }
 

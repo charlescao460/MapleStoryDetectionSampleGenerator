@@ -16,8 +16,8 @@ namespace MapRender.Invoker
 {
     internal class MapRender : FrmMapRender2
     {
-        private Stream _screenShotStream;
-        private ScreenShotData _screenShotData;
+        private volatile Stream _screenShotStream;
+        private volatile ScreenShotData _screenShotData;
 
         public MapRender(Wz_Image img) : base(img)
         {
