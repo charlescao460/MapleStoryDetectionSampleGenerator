@@ -34,10 +34,16 @@ namespace MapleStory.TFRecordPreparer
             [Option('m', "map", Required = true, HelpText = "Space-separated Wz image ID of map(s) used for generating TFRecord.")]
             public IEnumerable<string> Maps { get; set; }
 
-            [Option('x', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
+            [Option('x', "xStep", Required = true, HelpText = "Step in X.")]
+            public int StepX { get; set; }
+
+            [Option('y', "yStep", Required = true, HelpText = "Step in Y.")]
+            public int StepY { get; set; }
+
+            [Option('w', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
             public int RenderWidth { get; set; }
 
-            [Option('y', "height", Required = false, Default = 768, HelpText = "Height of sample image.")]
+            [Option('h', "height", Required = false, Default = 768, HelpText = "Height of sample image.")]
             public int RenderHeight { get; set; }
 
             [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
@@ -85,33 +91,10 @@ namespace MapleStory.TFRecordPreparer
             renderInvoker.LoadMap(imgText);
             renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
 
-            int lastX;
-            bool reverse = false;
-            long timer = 0;
-            const int step = 5;
-            bool took = false;
-            while (true) // block
-            {
-                Thread.Sleep(step);
-                lastX = renderInvoker.CurrentCameraX;
-                renderInvoker.MoveCamera(renderInvoker.CurrentCameraX + (reverse ? 1 : -1), renderInvoker.CurrentCameraY);
-                if (renderInvoker.CurrentCameraX == lastX)
-                {
-                    reverse = !reverse;
-                }
-
-                timer += step;
-                if (timer >= 2000 && !took)
-                {
-                    Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-                    var tfExample = sampler.SampleSingle();
-                    TfRecordWriter writer = new TfRecordWriter(tfExample.Guid.ToString());
-                    writer.Write(tfExample);
-                    writer.Dispose();
-                    took = true;
-                }
-            }
-
+            // Do sampling!
+            TfRecordWriter writer = new TfRecordWriter(map);
+            Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
+            sampler.SampleAll(options.StepX, options.StepY, writer, 200);
             return 0;
         }
 

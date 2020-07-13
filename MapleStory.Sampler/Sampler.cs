@@ -4,7 +4,9 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MapRender.Invoker;
 using Encoder = System.Drawing.Imaging.Encoder;
@@ -37,10 +39,36 @@ namespace MapleStory.Sampler
             return TfExample.From(stream, items, width, height);
         }
 
-        public List<string> SampleAll(int xStep, int yStep)
+        /// <summary>
+        /// Sample all based on provided step
+        /// </summary>
+        /// <param name="xStep">step in X to sample</param>
+        /// <param name="yStep">step in Y to sample</param>
+        /// <param name="writer">Writer to save result</param>
+        /// <param name="interval">Sampling time interval, in ms.</param>
+        public void SampleAll(int xStep, int yStep, TfRecordWriter writer, int interval = 0)
         {
-            //TODO
-            return null;
+            xStep = Math.Abs(xStep);
+            yStep = Math.Abs(yStep);
+            int initX = _renderInvoker.WorldOriginX + _renderInvoker.ScreenWidth / 2;
+            int initY = _renderInvoker.WorldOriginY + _renderInvoker.ScreenHeight / 2;
+            int endX = _renderInvoker.WorldOriginX + _renderInvoker.WorldWidth - _renderInvoker.ScreenWidth / 2;
+            int endY = _renderInvoker.WorldOriginY + _renderInvoker.WorldHeight - _renderInvoker.ScreenHeight / 2;
+
+            for (int x = initX; x < endX; x += xStep)
+            {
+                for (int y = initY; y < endY; y += yStep)
+                {
+                    Console.WriteLine($"Sampling at center x={x},y={y}....");
+                    _renderInvoker.MoveCamera(x,y);
+                    TfExample example = SampleSingle();
+                    Console.WriteLine($"Writing {example.Guid} to TfRecord...");
+                    writer.Write(example);
+                    Console.WriteLine("Done writing.");
+                    Thread.Sleep(interval);
+                }
+            }
+            return;
         }
 
         private MemoryStream EncodeScreenShot(Stream screenShotStream)
@@ -65,7 +93,7 @@ namespace MapleStory.Sampler
             return ret;
         }
 
-        private List<TargetItem> FilterTargetsInCamera(ScreenShotData data)
+        private static List<TargetItem> FilterTargetsInCamera(ScreenShotData data)
         {
             List<TargetItem> ret = new List<TargetItem>();
             List<TargetItem> source = data.Items;

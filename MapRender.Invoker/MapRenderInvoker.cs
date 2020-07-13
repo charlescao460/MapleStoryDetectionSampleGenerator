@@ -34,6 +34,10 @@ namespace MapRender.Invoker
 
         public int WorldHeight => _camera.WorldRect.Height;
 
+        public int WorldOriginX => _camera.WorldRect.X;
+
+        public int WorldOriginY => _camera.WorldRect.Y;
+
         public int CurrentCameraX => (int)_camera.Center.X;
 
         public int CurrentCameraY => (int) _camera.Center.Y;
