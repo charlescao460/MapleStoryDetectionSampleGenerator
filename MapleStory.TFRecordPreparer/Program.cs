@@ -40,6 +40,9 @@ namespace MapleStory.TFRecordPreparer
             [Option('y', "yStep", Required = true, HelpText = "Step in Y.")]
             public int StepY { get; set; }
 
+            [Option('o', "output", Required = false, Default = ".", HelpText = "Data set output location")]
+            public string OutputPath { get; set; }
+
             [Option('w', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
             public int RenderWidth { get; set; }
 
@@ -151,6 +154,12 @@ namespace MapleStory.TFRecordPreparer
                 .Any(e => e.Name.Equals(options.Encoding, StringComparison.OrdinalIgnoreCase)))
             {
                 throw new ArgumentException($"{options.Encoding} is not an available Encoding in your system.");
+            }
+
+            // Check output path
+            if (!Directory.Exists(options.OutputPath))
+            {
+                throw new ArgumentException($"OutputPath {options.OutputPath} does not exist.");
             }
         }
 

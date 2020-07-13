@@ -69,10 +69,10 @@ namespace MapleStory.Sampler
             _featureMap[KeySourceId] = NewBytesFeature(guidString);
         }
 
-        public static TfExample From(MemoryStream imageStream, IEnumerable<TargetItem> items, int width, int height)
+        public static TfExample From(Sample sample)
         {
-            TfExample ret = new TfExample(imageStream, width, height, items.Count());
-            foreach (var item in items)
+            TfExample ret = new TfExample(sample.ImageStream, sample.Width, sample.Height, sample.Items.Count());
+            foreach (var item in sample.Items)
             {
                 ret.AddItem(item);
             }

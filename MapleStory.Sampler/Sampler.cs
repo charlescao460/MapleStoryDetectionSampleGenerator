@@ -28,7 +28,7 @@ namespace MapleStory.Sampler
             }
         }
 
-        public TfExample SampleSingle()
+        public Sample SampleSingle()
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
@@ -36,7 +36,7 @@ namespace MapleStory.Sampler
             var items = FilterTargetsInCamera(screenShotData);
             int width = screenShotData.CameraRectangle.Width;
             int height = screenShotData.CameraRectangle.Height;
-            return TfExample.From(stream, items, width, height);
+            return new Sample(stream, items, width, height);
         }
 
         /// <summary>
@@ -46,7 +46,7 @@ namespace MapleStory.Sampler
         /// <param name="yStep">step in Y to sample</param>
         /// <param name="writer">Writer to save result</param>
         /// <param name="interval">Sampling time interval, in ms.</param>
-        public void SampleAll(int xStep, int yStep, TfRecordWriter writer, int interval = 0)
+        public void SampleAll(int xStep, int yStep, IDatasetWriter writer, int interval = 0)
         {
             xStep = Math.Abs(xStep);
             yStep = Math.Abs(yStep);
@@ -60,10 +60,10 @@ namespace MapleStory.Sampler
                 for (int y = initY; y < endY; y += yStep)
                 {
                     Console.WriteLine($"Sampling at center x={x},y={y}....");
-                    _renderInvoker.MoveCamera(x,y);
-                    TfExample example = SampleSingle();
-                    Console.WriteLine($"Writing {example.Guid} to TfRecord...");
-                    writer.Write(example);
+                    _renderInvoker.MoveCamera(x, y);
+                    Sample sample = SampleSingle();
+                    Console.WriteLine($"Writing {sample.Guid.ToString()} to TfRecord...");
+                    writer.Write(sample);
                     Console.WriteLine("Done writing.");
                     Thread.Sleep(interval);
                 }

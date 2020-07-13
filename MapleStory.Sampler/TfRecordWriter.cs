@@ -8,7 +8,7 @@ using Crc32C;
 
 namespace MapleStory.Sampler
 {
-    public class TfRecordWriter : IDisposable
+    public class TfRecordWriter : IDisposable, IDatasetWriter
     {
         public const string TfRecordNameExtension = ".tfrecord";
         private const int BufferSize = 5120;
@@ -30,6 +30,11 @@ namespace MapleStory.Sampler
         ~TfRecordWriter()
         {
             this.Dispose();
+        }
+
+        void IDatasetWriter.Write(Sample sample)
+        {
+            Write(TfExample.From(sample));
         }
 
         public void Write(TfExample example)
@@ -86,10 +91,10 @@ namespace MapleStory.Sampler
             return (uint)(((crc >> 15) | (crc << 17)) + 0xa282ead8UL);
         }
 
-
         public void Dispose()
         {
             _fileStream?.Dispose();
         }
+
     }
 }
