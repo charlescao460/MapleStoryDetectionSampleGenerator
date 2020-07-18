@@ -19,6 +19,7 @@ namespace MapleStory.Sampler
 
         private List<ObjectClass> _occurenceClasses;
         private bool _isFinished;
+        private bool _disposed;
         private StreamWriter _trainingDataListWriter;
 
         public string RootPath { get; private set; }
@@ -43,6 +44,7 @@ namespace MapleStory.Sampler
             _occurenceClasses = new List<ObjectClass>();
             _isFinished = false;
             _trainingDataListWriter = new StreamWriter(new FileStream(Path.Combine(RootPath, TrainingDataFile), FileMode.CreateNew));
+            _trainingDataListWriter.AutoFlush = true;
         }
 
 
@@ -51,6 +53,7 @@ namespace MapleStory.Sampler
             // Write training list
             string trainDataLine = $"{DefaultRootDirectory}/{ObjDirectory}/{sample.Guid + ".jpg"}";
             _trainingDataListWriter.WriteLine(trainDataLine);
+            _trainingDataListWriter.Flush();
 
             // Write images
             using (FileStream imageStream =
@@ -97,6 +100,11 @@ namespace MapleStory.Sampler
                 double yCenter = ((double)sampleItem.Y + sampleItem.Height / 2.0) / height;
                 double sampleWidth = sampleItem.Width / width;
                 double sampleHeight = sampleItem.Height / height;
+                double[] numbers = { xCenter, yCenter, sampleWidth, sampleHeight };
+                if (numbers.Any(n => n < 0 || n > 1))
+                {
+                    throw new InvalidDataException("Size and coordinates must be positive number smaller than 1");
+                }
 
                 writer.Write(_occurenceClasses.IndexOf(type)); // <object-class>
                 writer.Write(' ');
@@ -165,12 +173,15 @@ namespace MapleStory.Sampler
                 Finish();
             }
             _trainingDataListWriter.Dispose();
-            _trainingDataListWriter.BaseStream.Dispose();
+            _disposed = true;
         }
 
         ~DarknetWriter()
         {
-            Dispose();
+            if (!_disposed)
+            {
+                Dispose();
+            }
         }
 
     }

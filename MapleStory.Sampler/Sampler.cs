@@ -98,26 +98,67 @@ namespace MapleStory.Sampler
             List<TargetItem> ret = new List<TargetItem>();
             List<TargetItem> source = data.Items;
             Rectangle camRectangle = data.CameraRectangle;
+            int imgWidth = camRectangle.Width;
+            int imgHeight = camRectangle.Height;
             source.ForEach(i =>
             {
                 i.X -= camRectangle.X;
                 i.Y -= camRectangle.Y;
 
-                double itemArea = i.Height * i.Width;
-                int inCameraWidth = (i.X < 0 ? i.X + i.Width : i.Width) % camRectangle.Width;
-                int inCameraHeight = (i.Y < 0 ? i.Y + i.Height : i.Height) % camRectangle.Height;
-                inCameraWidth = (inCameraWidth + i.X) > camRectangle.Width ? (camRectangle.Width - i.X) : inCameraWidth;
-                inCameraHeight = (inCameraHeight + i.Y) > camRectangle.Height ? (camRectangle.Height - i.Y) : inCameraHeight;
-                double inCameraArea = inCameraHeight * inCameraWidth;
-
-                if (inCameraArea / itemArea >= ITEM_PARTIAL_AREA_THRESHOLD
-                    && i.X < camRectangle.Width
-                    && i.Y < camRectangle.Height)
+                // Validation
+                if (i.Height < 0 || i.Width < 0)
                 {
-                    i.Height = inCameraHeight;
+                    throw new InvalidDataException("Items Height or Width is negative!!");
+                }
+
+                // Not show in screenshots at all
+                if (i.X > imgWidth || i.Y > imgHeight)
+                {
+                    return;
+                }
+                int inCameraWidth = i.Width;
+                int inCameraHeight = i.Height;
+                double itemArea = i.Width * i.Height;
+
+                // Partial in X - left
+                if (i.X < 0)
+                {
+                    inCameraWidth = i.X + i.Width;
+                    if (inCameraWidth < 0)
+                    {
+                        return;
+                    }
+                    i.X = 0;
+                }
+
+                // Partial in X - right
+                if (i.X + i.Width > imgWidth)
+                {
+                    inCameraWidth = imgWidth - i.X;
+                }
+
+                // Partial in Y - up
+                if (i.Y < 0)
+                {
+                    inCameraHeight = i.Y + i.Height;
+                    if (inCameraHeight < 0)
+                    {
+                        return;
+                    }
+                    i.Y = 0;
+                }
+
+                // Partial in Y - bottom
+                if (i.Y + i.Height > imgHeight)
+                {
+                    inCameraHeight = imgHeight - i.Y;
+                }
+
+                double inCameraArea = inCameraHeight * imgWidth;
+                if (inCameraArea / itemArea >= ITEM_PARTIAL_AREA_THRESHOLD)
+                {
                     i.Width = inCameraWidth;
-                    i.X = i.X < 0 ? 0 : i.X;
-                    i.Y = i.Y < 0 ? 0 : i.Y;
+                    i.Height = inCameraHeight;
                     ret.Add(i);
                 }
             });
