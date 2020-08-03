@@ -31,6 +31,10 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="DevComponents.DotNetBar2, Version=12.5.0.2, Culture=neutral, PublicKeyToken=c39c3242a43eee2b, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\WzComparerR2\References\DevComponents.DotNetBar2.dll</HintPath>
+    </Reference>
     <Reference Include="EmptyKeys.UserInterface, Version=2.6.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\WzComparerR2\References\EmptyKeys.UserInterface.dll</HintPath>
@@ -42,6 +46,7 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -64,6 +69,10 @@
     <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj">
       <Project>{f85ca8f5-e0a7-488d-b0ba-30a768a53183}</Project>
       <Name>MapleStory.Common</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\WzComparerR2\WzComparerR2.Avatar\WzComparerR2.Avatar.csproj">
+      <Project>{a0753218-2c58-4e4a-9017-a435d2e5f639}</Project>
+      <Name>WzComparerR2.Avatar</Name>
     </ProjectReference>
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.Common\WzComparerR2.Common.csproj">
       <Project>{818060bc-404c-470a-94b3-5160716c5247}</Project>

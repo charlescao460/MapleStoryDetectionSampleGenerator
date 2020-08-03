@@ -12,6 +12,7 @@ using CommandLine;
 using CommandLine.Text;
 using MapleStory.Common;
 using MapleStory.Sampler;
+using MapleStory.Sampler.PostProcessor;
 using MapRender.Invoker;
 
 namespace MapleStory.TFRecordPreparer
@@ -58,6 +59,12 @@ namespace MapleStory.TFRecordPreparer
             [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
             public string MapleStoryPath { get; set; }
 
+            [Option("post", Required = false, Default = "", HelpText = "Indicate whether to enable post-processing.")]
+            public bool PostProcessingEnable { get; set; }
+
+            [Option("players", Required = false, Default = "", HelpText = "Directory where the post-processing player images stored.")]
+            public string PlayerImageDirectory { get; set; }
+
             [Option('e', "encoding", Required = false, HelpText = "Encoding used to decode Wz strings. Using system default if not specified.")]
             public string Encoding { get; set; } = "";
         }
@@ -94,7 +101,7 @@ namespace MapleStory.TFRecordPreparer
             MapRenderInvoker renderInvoker = new MapRenderInvoker(options.MapleStoryPath,
                 options.Encoding == string.Empty ? Encoding.Default : Encoding.GetEncoding(options.Encoding),
                 false);
-            // Iterate each map
+            // TODO: Iterate each map
             var map = options.Maps.First();
             string imgText = map.EndsWith(".img") ? map : (map + ".img");
             renderInvoker.LoadMap(imgText);
@@ -111,6 +118,11 @@ namespace MapleStory.TFRecordPreparer
                 writer = new TfRecordWriter(options.OutputPath + "/" + map);
             }
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
+            if (options.PostProcessingEnable && options.PlayerImageDirectory != "")
+            {
+                IPostProcessor postProcessor = new PlayerProcessor(options.PlayerImageDirectory);
+                sampler.OnSampleCaptured += (s, e) => postProcessor.Process(s);
+            }
             sampler.SampleAll(options.StepX, options.StepY, writer, options.SampleInterval);
             writer.Finish();
             return 0;
@@ -181,6 +193,18 @@ namespace MapleStory.TFRecordPreparer
             if (options.SampleInterval < 0)
             {
                 throw new ArgumentException("SampleInterval cannot be negative!");
+            }
+
+            // Check for post-processing
+            if (options.PostProcessingEnable)
+            {
+                if (options.PlayerImageDirectory != "")
+                {
+                    if (!Directory.Exists(options.PlayerImageDirectory))
+                    {
+                        throw new ArgumentException($"PlayerImageDirectory {options.PlayerImageDirectory} cannot be found!");
+                    }
+                }
             }
         }
 

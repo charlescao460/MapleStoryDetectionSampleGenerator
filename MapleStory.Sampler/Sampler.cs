@@ -19,6 +19,10 @@ namespace MapleStory.Sampler
         private const double ITEM_PARTIAL_AREA_THRESHOLD = 0.70;
         private readonly MapRenderInvoker _renderInvoker;
 
+        public delegate void SamplePostProcessor(Sample sample, EventArgs e);
+
+        public event SamplePostProcessor OnSampleCaptured;
+
         public Sampler(MapRenderInvoker renderInvoker)
         {
             _renderInvoker = renderInvoker;
@@ -32,11 +36,13 @@ namespace MapleStory.Sampler
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
-            stream = EncodeScreenShot(stream);
             var items = FilterTargetsInCamera(screenShotData);
             int width = screenShotData.CameraRectangle.Width;
             int height = screenShotData.CameraRectangle.Height;
-            return new Sample(stream, items, width, height);
+            Sample ret = new Sample(stream, items, width, height);
+            OnSampleCaptured?.Invoke(ret, null);
+            ret.ImageStream = EncodeScreenShot(ret.ImageStream);
+            return ret;
         }
 
         /// <summary>
@@ -55,6 +61,9 @@ namespace MapleStory.Sampler
             int endX = _renderInvoker.WorldOriginX + _renderInvoker.WorldWidth - _renderInvoker.ScreenWidth / 2;
             int endY = _renderInvoker.WorldOriginY + _renderInvoker.WorldHeight - _renderInvoker.ScreenHeight / 2;
 
+            int count = 0;
+            int total = ((endX - initX) / xStep) * ((endY - initY / yStep));
+
             for (int x = initX; x < endX; x += xStep)
             {
                 for (int y = initY; y < endY; y += yStep)
@@ -64,7 +73,8 @@ namespace MapleStory.Sampler
                     Sample sample = SampleSingle();
                     Console.WriteLine($"Writing {sample.Guid.ToString()} to TfRecord...");
                     writer.Write(sample);
-                    Console.WriteLine("Done writing.");
+                    count++;
+                    Console.WriteLine($"Done writing. Progress: {count}/{total}, {(double)count / total}%\n");
                     Thread.Sleep(interval);
                 }
             }
@@ -78,6 +88,7 @@ namespace MapleStory.Sampler
             Rectangle rectangle = new Rectangle(Point.Empty, source.Size);
             using (Graphics graphics = Graphics.FromImage(result))
             {
+                // Dark background, to back alpha channel.
                 graphics.Clear(Color.Black);
                 graphics.DrawImageUnscaledAndClipped(source, rectangle);
             }

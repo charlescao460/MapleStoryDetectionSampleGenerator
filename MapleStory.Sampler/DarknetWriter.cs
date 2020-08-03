@@ -10,6 +10,8 @@ namespace MapleStory.Sampler
 {
     public class DarknetWriter : IDatasetWriter, IDisposable
     {
+        private const double DefaultTestingPortion = 0.05;
+
         private const string DefaultRootDirectory = "data";
         private const string ClassNamesFile = "obj.names";
         private const string ObjectDataFile = "obj.data";
@@ -17,10 +19,12 @@ namespace MapleStory.Sampler
         private const string TestingDataFile = "test.txt";
         private const string ObjDirectory = "obj";
 
-        private List<ObjectClass> _occurenceClasses;
+        private readonly List<ObjectClass> _occurenceClasses;
         private bool _isFinished;
         private bool _disposed;
-        private StreamWriter _trainingDataListWriter;
+        private readonly StreamWriter _trainingDataListWriter;
+        private readonly StreamWriter _testingDataListWriter;
+        private readonly Random _random;
 
         public string RootPath { get; private set; }
 
@@ -43,17 +47,23 @@ namespace MapleStory.Sampler
             Directory.CreateDirectory(ObjPath);
             _occurenceClasses = new List<ObjectClass>();
             _isFinished = false;
+            _random = new Random();
             _trainingDataListWriter = new StreamWriter(new FileStream(Path.Combine(RootPath, TrainingDataFile), FileMode.CreateNew));
             _trainingDataListWriter.AutoFlush = true;
+            _testingDataListWriter = new StreamWriter(new FileStream(Path.Combine(RootPath, TestingDataFile), FileMode.CreateNew));
+            _testingDataListWriter.AutoFlush = true;
         }
 
 
         public void Write(Sample sample)
         {
             // Write training list
-            string trainDataLine = $"{DefaultRootDirectory}/{ObjDirectory}/{sample.Guid + ".jpg"}";
-            _trainingDataListWriter.WriteLine(trainDataLine);
-            _trainingDataListWriter.Flush();
+            string dataLine = $"{DefaultRootDirectory}/{ObjDirectory}/{sample.Guid + ".jpg"}";
+            StreamWriter destination = _random.NextDouble() < DefaultTestingPortion
+                ? _testingDataListWriter
+                : _trainingDataListWriter;
+            destination.WriteLine(dataLine);
+            destination.Flush();
 
             // Write images
             using (FileStream imageStream =
@@ -77,6 +87,7 @@ namespace MapleStory.Sampler
             WriteObjData();
             WriteClassNames();
             _trainingDataListWriter.Flush();
+            _testingDataListWriter.Flush();
             _isFinished = true;
         }
 
@@ -173,6 +184,7 @@ namespace MapleStory.Sampler
                 Finish();
             }
             _trainingDataListWriter.Dispose();
+            _testingDataListWriter.Dispose();
             _disposed = true;
         }
 

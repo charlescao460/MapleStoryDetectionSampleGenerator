@@ -10,20 +10,20 @@ namespace MapleStory.Sampler
 {
     public class Sample
     {
-        public MemoryStream ImageStream { get; private set; }
+        public MemoryStream ImageStream { get; internal set; }
 
-        public IEnumerable<TargetItem> Items { get; private set; }
+        public IList<TargetItem> Items { get; internal set; }
 
-        public int Width { get; private set; }
+        public int Width { get; internal set; }
 
-        public int Height { get; private set; }
+        public int Height { get; internal set; }
 
         public Guid Guid { get; private set; }
 
         public Sample(MemoryStream imageStream, IEnumerable<TargetItem> items, int width, int height)
         {
             ImageStream = imageStream;
-            Items = items;
+            Items = new List<TargetItem>(items);
             Width = width;
             Height = height;
             Guid = Guid.NewGuid();
