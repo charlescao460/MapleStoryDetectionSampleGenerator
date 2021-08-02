@@ -78,6 +78,7 @@ namespace MapleStory.Sampler
                     Thread.Sleep(interval);
                 }
             }
+            Console.WriteLine("############## All Samples Captured ##############");
             return;
         }
 

@@ -58,6 +58,10 @@ namespace MapleStory.Sampler.PostProcessor
         {
             Bitmap result = new Bitmap(source);
             Rectangle drawRegion = new Rectangle(x, y, player.Width, player.Height);
+            if (_random.NextDouble() > 0.5)
+            {
+                player.RotateFlip(RotateFlipType.RotateNoneFlipX);
+            }
             using (Graphics graphics = Graphics.FromImage(result))
             {
                 graphics.DrawImageUnscaledAndClipped(player, drawRegion);
