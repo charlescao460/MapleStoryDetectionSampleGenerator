@@ -15,7 +15,7 @@ using MapleStory.Sampler;
 using MapleStory.Sampler.PostProcessor;
 using MapRender.Invoker;
 
-namespace MapleStory.TFRecordPreparer
+namespace MapleStory.MachineLearningSampleGenerator
 {
     internal static class Program
     {
@@ -135,12 +135,12 @@ namespace MapleStory.TFRecordPreparer
         private static void PreRunTest(Options options)
         {
             // Check resolution
-            if (options.RenderHeight <= 0 || options.RenderHeight > System.Windows.SystemParameters.WorkArea.Height)
+            if (options.RenderHeight <= 0)
             {
                 throw new ArgumentException("Render size cannot exceed screen size. Height illegal.",
                     nameof(options.RenderHeight));
             }
-            if (options.RenderWidth <= 0 || options.RenderWidth > System.Windows.SystemParameters.WorkArea.Width)
+            if (options.RenderWidth <= 0)
             {
                 throw new ArgumentException("Render size cannot exceed screen size. Width illegal.",
                     nameof(options.RenderWidth));

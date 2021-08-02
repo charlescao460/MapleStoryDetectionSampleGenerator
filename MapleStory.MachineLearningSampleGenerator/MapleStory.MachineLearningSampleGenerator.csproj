@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net5.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.8.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
+  </ItemGroup>
+</Project>
