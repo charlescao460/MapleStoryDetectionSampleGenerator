@@ -19,16 +19,16 @@ namespace MapleStory.Sampler
         private const string TestingDataFile = "test.txt";
         private const string ObjDirectory = "obj";
 
-        private readonly List<ObjectClass> _occurenceClasses;
+        private readonly List<ObjectClass> _occurrenceClasses;
         private bool _isFinished;
         private bool _disposed;
         private readonly StreamWriter _trainingDataListWriter;
         private readonly StreamWriter _testingDataListWriter;
         private readonly Random _random;
 
-        public string RootPath { get; private set; }
+        public string RootPath { get; }
 
-        public string ObjPath { get; private set; }
+        public string ObjPath { get; }
 
         public DarknetWriter(string path)
         {
@@ -45,7 +45,7 @@ namespace MapleStory.Sampler
             CleanDirectory(RootPath);
             ObjPath = Path.Combine(RootPath, ObjDirectory);
             Directory.CreateDirectory(ObjPath);
-            _occurenceClasses = new List<ObjectClass>();
+            _occurrenceClasses = new List<ObjectClass>();
             _isFinished = false;
             _random = new Random();
             _trainingDataListWriter = new StreamWriter(new FileStream(Path.Combine(RootPath, TrainingDataFile), FileMode.CreateNew));
@@ -102,9 +102,9 @@ namespace MapleStory.Sampler
             foreach (var sampleItem in sample.Items)
             {
                 ObjectClass type = sampleItem.Type;
-                if (!_occurenceClasses.Contains(type))
+                if (!_occurrenceClasses.Contains(type))
                 {
-                    _occurenceClasses.Add(type);
+                    _occurrenceClasses.Add(type);
                 }
 
                 double xCenter = ((double)sampleItem.X + sampleItem.Width / 2.0) / width;
@@ -117,7 +117,7 @@ namespace MapleStory.Sampler
                     throw new InvalidDataException("Size and coordinates must be positive number smaller than 1");
                 }
 
-                writer.Write(_occurenceClasses.IndexOf(type)); // <object-class>
+                writer.Write(_occurrenceClasses.IndexOf(type)); // <object-class>
                 writer.Write(' ');
                 writer.Write(xCenter); // <x_center>
                 writer.Write(' ');
@@ -130,9 +130,8 @@ namespace MapleStory.Sampler
             }
         }
 
-        private void CleanDirectory(string path)
+        private static void CleanDirectory(string path)
         {
-
             if (Directory.EnumerateFileSystemEntries(path).Any())
             {
                 Console.WriteLine("Warning: Target RootPath Is Not Empty. Cleaning target path...");
@@ -154,7 +153,7 @@ namespace MapleStory.Sampler
             {
                 using (StreamWriter writer = new StreamWriter(file))
                 {
-                    writer.WriteLine($"classes={_occurenceClasses.Count}");
+                    writer.WriteLine($"classes={_occurrenceClasses.Count}");
                     writer.WriteLine($"train={DefaultRootDirectory}/{TrainingDataFile}");
                     writer.WriteLine($"valid={DefaultRootDirectory}/{TestingDataFile}");
                     writer.WriteLine($"names={DefaultRootDirectory}/{ClassNamesFile}");
@@ -169,7 +168,7 @@ namespace MapleStory.Sampler
             {
                 using (StreamWriter writer = new StreamWriter(file))
                 {
-                    foreach (var occurenceClass in _occurenceClasses)
+                    foreach (var occurenceClass in _occurrenceClasses)
                     {
                         writer.WriteLine(Enum.GetName(typeof(ObjectClass), occurenceClass));
                     }

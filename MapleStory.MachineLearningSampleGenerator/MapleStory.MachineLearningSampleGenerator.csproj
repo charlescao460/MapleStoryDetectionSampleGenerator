@@ -1,13 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
-    <PlatformTarget>x64</PlatformTarget>
-    <OutputType>Exe</OutputType>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="CommandLineParser" Version="2.8.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
-  </ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net5.0-windows</TargetFramework>
+        <UseWindowsForms>true</UseWindowsForms>
+        <PlatformTarget>x64</PlatformTarget>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="CommandLineParser" Version="2.8.0" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
+    </ItemGroup>
+    <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+      <Exec Command="xcopy &quot;$(ProjectDir)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\*&quot; &quot;$(TargetDir)&quot; /I /Y /S" />
+    </Target>
 </Project>

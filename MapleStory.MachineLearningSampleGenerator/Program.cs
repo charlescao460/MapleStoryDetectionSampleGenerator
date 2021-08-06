@@ -22,8 +22,12 @@ namespace MapleStory.MachineLearningSampleGenerator
         [DllImport("kernel32.dll")]
         static extern bool SetDllDirectory(string path);
 
+        [DllImport("kernel32")]
+        static extern bool AllocConsole();
+
         static Program()
         {
+            AllocConsole();
             Console.OutputEncoding = Encoding.UTF8; // Correctly show non-English characters
             string libPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib",
                 Environment.Is64BitProcess ? "x64" : "x86");
@@ -41,11 +45,11 @@ namespace MapleStory.MachineLearningSampleGenerator
             [Option('y', "yStep", Required = true, HelpText = "Step in Y.")]
             public int StepY { get; set; }
 
+            [Option('f', "format", Required = true, HelpText = "Output format, must be one of: [tfrecord, darknet, coco]")]
+            public string Format { get; set; }
+
             [Option('o', "output", Required = false, Default = ".", HelpText = "Data set output location")]
             public string OutputPath { get; set; }
-
-            [Option('d', "darknet", Required = false, Default = false, HelpText = "Output to Darknet YOLO dataset.")]
-            public bool DarkNet { get; set; }
 
             [Option('w', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
             public int RenderWidth { get; set; }
@@ -53,7 +57,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             [Option('h', "height", Required = false, Default = 768, HelpText = "Height of sample image.")]
             public int RenderHeight { get; set; }
 
-            [Option('i', "interval", Required = false, Default = 0, HelpText = "Time interval between each sample")]
+            [Option('i', "interval", Required = false, Default = 0, HelpText = "Time interval in ms between each sample")]
             public int SampleInterval { get; set; }
 
             [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
@@ -108,15 +112,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
 
             // Do sampling!
-            IDatasetWriter writer;
-            if (options.DarkNet)
-            {
-                writer = new DarknetWriter(options.OutputPath);
-            }
-            else
-            {
-                writer = new TfRecordWriter(options.OutputPath + "/" + map);
-            }
+            IDatasetWriter writer = GetDatasetWriter(options, map);
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
             if (options.PostProcessingEnable && options.PlayerImageDirectory != "")
             {
@@ -145,6 +141,9 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new ArgumentException("Render size cannot exceed screen size. Width illegal.",
                     nameof(options.RenderWidth));
             }
+
+            // Check format
+            Enum.Parse(typeof(OutputFormat), options.Format, true);
 
             // Check file path
             if (options.MapleStoryPath == string.Empty)
@@ -205,6 +204,21 @@ namespace MapleStory.MachineLearningSampleGenerator
                         throw new ArgumentException($"PlayerImageDirectory {options.PlayerImageDirectory} cannot be found!");
                     }
                 }
+            }
+        }
+
+        private static IDatasetWriter GetDatasetWriter(Options options, string map)
+        {
+            switch (Enum.Parse(typeof(OutputFormat), options.Format, true))
+            {
+                case OutputFormat.TfRecord:
+                    return new TfRecordWriter(Path.Combine(options.OutputPath, map));
+                case OutputFormat.Darknet:
+                    return new DarknetWriter(options.OutputPath);
+                case OutputFormat.Coco:
+                    return new CocoWriter(options.OutputPath, $"MapleStory {map}.img Object Detection Samples");
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(options), options, null);
             }
         }
 

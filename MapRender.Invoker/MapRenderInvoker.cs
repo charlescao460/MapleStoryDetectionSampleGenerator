@@ -252,7 +252,7 @@ namespace MapRender.Invoker
                 throw new ArgumentException($"Cannot find {MapleStoryPathHelper.MapleStoryBaseWzName} in given directory {mapleStoryPath}.");
             }
             _wzStructure = new Wz_Structure();
-            _wzStructure.Load(baseWzPath);
+            _wzStructure.Load(baseWzPath, true);
         }
 
         /// <summary>
