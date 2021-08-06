@@ -25,9 +25,20 @@ namespace MapleStory.MachineLearningSampleGenerator
         [DllImport("kernel32")]
         static extern bool AllocConsole();
 
+        [DllImport("kernel32.dll")]
+        static extern bool AttachConsole(int dwProcessId);
+
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GetConsoleWindow();
+
         static Program()
         {
-            AllocConsole();
+            AttachConsole(-1); // Try to attach to parent process's console
+            if (GetConsoleWindow() == IntPtr.Zero)
+            {
+                AllocConsole();
+            }
+
             Console.OutputEncoding = Encoding.UTF8; // Correctly show non-English characters
             string libPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Lib",
                 Environment.Is64BitProcess ? "x64" : "x86");

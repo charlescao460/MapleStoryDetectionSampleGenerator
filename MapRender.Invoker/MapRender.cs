@@ -64,7 +64,7 @@ namespace MapRender.Invoker
         {
             int width = GraphicsDevice.PresentationParameters.BackBufferWidth;
             int height = GraphicsDevice.PresentationParameters.BackBufferHeight;
-            RenderTarget2D target = new RenderTarget2D(GraphicsDevice, width, height, false,
+            using RenderTarget2D target = new RenderTarget2D(GraphicsDevice, width, height, false,
                 SurfaceFormat.Rgba64, DepthFormat.None);
             var oldTarget = GraphicsDevice.GetRenderTargets();
             GraphicsDevice.SetRenderTarget(target);

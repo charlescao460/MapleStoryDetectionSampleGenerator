@@ -85,8 +85,8 @@ namespace MapleStory.Sampler
 
         private MemoryStream EncodeScreenShot(Stream screenShotStream)
         {
-            Bitmap source = new Bitmap(screenShotStream);
-            Bitmap result = new Bitmap(_renderInvoker.ScreenWidth, _renderInvoker.ScreenHeight);
+            using Bitmap source = new Bitmap(screenShotStream);
+            using Bitmap result = new Bitmap(_renderInvoker.ScreenWidth, _renderInvoker.ScreenHeight);
             Rectangle rectangle = new Rectangle(Point.Empty, source.Size);
             using (Graphics graphics = Graphics.FromImage(result))
             {
