@@ -62,7 +62,8 @@ namespace MapleStory.Sampler
             int endY = _renderInvoker.WorldOriginY + _renderInvoker.WorldHeight - _renderInvoker.ScreenHeight / 2;
 
             int count = 0;
-            int total = ((endX - initX) / xStep) * ((endY - initY / yStep));
+            int total = (int)(Math.Round((double)(endX - initX) / xStep, MidpointRounding.ToPositiveInfinity) *
+                         Math.Round((double)(endY - initY) / yStep, MidpointRounding.ToPositiveInfinity));
 
             for (int x = initX; x < endX; x += xStep)
             {
@@ -71,10 +72,10 @@ namespace MapleStory.Sampler
                     Console.WriteLine($"Sampling at center x={x},y={y}....");
                     _renderInvoker.MoveCamera(x, y);
                     Sample sample = SampleSingle();
-                    Console.WriteLine($"Writing {sample.Guid.ToString()} to TfRecord...");
+                    Console.WriteLine($"Writing {sample.Guid.ToString()} to dataset...");
                     writer.Write(sample);
                     count++;
-                    Console.WriteLine($"Done writing. Progress: {count}/{total}, {(double)count / total}%\n");
+                    Console.WriteLine($"Done writing. Progress: {count}/{total}, {(double)count / total * 100}%\n");
                     Thread.Sleep(interval);
                 }
             }
