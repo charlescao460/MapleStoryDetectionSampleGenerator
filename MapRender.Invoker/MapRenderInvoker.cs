@@ -43,6 +43,8 @@ namespace MapRender.Invoker
 
         public int CurrentCameraY => (int)_camera.Center.Y;
 
+        public int CurrentMap { get; private set; }
+
         public MapRenderInvoker(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
             : base(mapleStoryPath, encoding, disableImgCheck)
         {
@@ -72,6 +74,8 @@ namespace MapRender.Invoker
         ///<inheritdoc/>
         public override void LoadMap(string imgText)
         {
+            CurrentMap = int.Parse(imgText);
+            imgText = imgText.EndsWith(".img") ? imgText : (imgText + ".img");
             _currentMapImage = WzTreeSearcher.SearchForMap(_wzStructure.WzNode, imgText);
             Exception ex;
             _currentMapImage.TryExtract(out ex);
@@ -119,6 +123,12 @@ namespace MapRender.Invoker
             _renderThread.Start();
 
             while (!_isRunning) ; // Wait until ready
+        }
+
+        public override void SwitchMap(string imgText)
+        {
+            CurrentMap = int.Parse(imgText);
+            _mapRender.SwitchToNewMap(CurrentMap);
         }
 
         public void MoveCamera(int centerX, int centerY)
@@ -258,7 +268,7 @@ namespace MapRender.Invoker
         /// <summary>
         /// Load specified Wz map img to this invoker.
         /// </summary>
-        /// <param name="imgText">The map node text to search. E.g. "450007010.img" </param>
+        /// <param name="imgText">The map node search. E.g. "450007010" </param>
         /// <exception cref="MapleStory.Common.Exceptions.WzImgNotFoundException">If supplied img cannot be found.</exception>
         public abstract void LoadMap(string imgText);
 
@@ -268,6 +278,12 @@ namespace MapRender.Invoker
         /// <param name="width">Width of resolution</param>
         /// <param name="height">Height of resolution</param>
         public abstract void Launch(int width, int height);
+
+        /// <summary>
+        /// Switch to a new map after <see cref="Launch"/>
+        /// </summary>
+        /// <param name="imgText">The map node search. E.g. "450007010" </param>
+        public abstract void SwitchMap(string imgText);
 
     }
 }

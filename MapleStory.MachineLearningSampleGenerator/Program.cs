@@ -29,6 +29,9 @@ namespace MapleStory.MachineLearningSampleGenerator
         static extern bool AttachConsole(int dwProcessId);
 
         [DllImport("kernel32.dll")]
+        static extern bool FreeConsole();
+
+        [DllImport("kernel32.dll")]
         static extern IntPtr GetConsoleWindow();
 
         static Program()
@@ -89,6 +92,7 @@ namespace MapleStory.MachineLearningSampleGenerator
         {
             int ret = CommandLine.Parser.Default.ParseArguments<Options>(args).MapResult(RunAndReturn, OnParseError);
             Console.WriteLine("MapleStory_TFRecord_Preparer exited with code= {0}", ret);
+            FreeConsole();
             return ret;
         }
 
@@ -116,21 +120,28 @@ namespace MapleStory.MachineLearningSampleGenerator
             MapRenderInvoker renderInvoker = new MapRenderInvoker(options.MapleStoryPath,
                 options.Encoding == string.Empty ? Encoding.Default : Encoding.GetEncoding(options.Encoding),
                 false);
-            // TODO: Iterate each map
-            var map = options.Maps.First();
-            string imgText = map.EndsWith(".img") ? map : (map + ".img");
-            renderInvoker.LoadMap(imgText);
+            Queue<string> maps = new Queue<string>(options.Maps);
+            var first = maps.Dequeue();
+            renderInvoker.LoadMap(first);
             renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
-
-            // Do sampling!
-            IDatasetWriter writer = GetDatasetWriter(options, map);
+            // Initialize sampler
+            IDatasetWriter writer = GetDatasetWriter(options, first);
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
             if (options.PostProcessingEnable && options.PlayerImageDirectory != "")
             {
                 IPostProcessor postProcessor = new PlayerProcessor(options.PlayerImageDirectory);
                 sampler.OnSampleCaptured += (s, e) => postProcessor.Process(s);
             }
-            sampler.SampleAll(options.StepX, options.StepY, writer, options.SampleInterval);
+
+            while (true)
+            {
+                sampler.SampleAll(options.StepX, options.StepY, writer, options.SampleInterval);
+                if (maps.Count == 0)
+                {
+                    break;
+                }
+                renderInvoker.SwitchMap(maps.Dequeue());
+            }
             writer.Finish();
             return 0;
         }

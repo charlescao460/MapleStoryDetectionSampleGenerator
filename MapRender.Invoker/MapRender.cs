@@ -48,6 +48,16 @@ namespace MapRender.Invoker
             return ret;
         }
 
+        /// <summary>
+        /// Switch to a new map
+        /// </summary>
+        /// <param name="imgId">Wz img id</param>
+        public void SwitchToNewMap(int imgId)
+        {
+            MoveToPortal(imgId, null);
+            while (!SceneRunning) ; // Wait until new map loaded
+        }
+
         protected override void Draw(GameTime gameTime)
         {
             base.Draw(gameTime);
@@ -75,7 +85,7 @@ namespace MapRender.Invoker
             this.tooltip.Draw(gameTime, renderEnv);
             GraphicsDevice.SetRenderTargets(oldTarget);
             target.SaveAsPng(destination, width, height);
-            
+
         }
 
         private void GetScreenShotMapData(SceneNode node, ref ScreenShotData screenShotData)
