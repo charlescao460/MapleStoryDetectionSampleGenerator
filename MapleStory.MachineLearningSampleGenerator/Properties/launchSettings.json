@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "MapleStory.MachineLearningSampleGenerator": {
-      "commandName": "Project",
-      "commandLineArgs": "-m 450005222 -x 100 -y 100 -f coco -o \"C:\\Users\\CSR\\Documents\\...tmp\" --post --players \"C:\\Users\\CSR\\Documents\\...tmp\\players\""
-    }
-  }
-}
