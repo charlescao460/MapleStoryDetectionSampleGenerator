@@ -73,9 +73,13 @@ And `obj.names` contains the class name for object. `test.txt` and `train.txt` c
 Output directory structure:
 ```
 coco/
-|---images/
+|---train2017/
 |   |---1.jpg
 |   |---2.jpg
+|   |---......
+|---val2017/
+|   |---1000.jpg
+|   |---1001.jpg
 |   |---......
 |---annotations/
 |   |---instances_train2017.json

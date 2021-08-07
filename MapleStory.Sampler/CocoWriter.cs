@@ -14,17 +14,18 @@ namespace MapleStory.Sampler
     {
         private const double DefaultTestingPortion = 0.05;
         private const string DefaultRootDirectory = "coco";
-        private const string ImageDirectory = "images";
+        private const string TrainingDirectory = "train2017";
+        private const string ValidationDirectory = "val2017";
         private const string AnnotationDirectory = "annotations";
         private const string TrainingJson = "instances_train2017.json";
         private const string ValidationJson = "instances_val2017.json";
 
         public string RootPath { get; }
 
-        public string ImagesPath { get; }
-
         public string AnnotationsPath { get; }
 
+        private readonly string _trainingImagesPath;
+        private readonly string _validationImagesPath;
         private readonly Random _random;
         private readonly List<ObjectClass> _occurrenceClasses;
         private readonly string _datasetName;
@@ -47,8 +48,10 @@ namespace MapleStory.Sampler
                 Directory.CreateDirectory(RootPath);
             }
             CleanDirectory(RootPath);
-            ImagesPath = Path.Combine(RootPath, ImageDirectory);
-            Directory.CreateDirectory(ImagesPath);
+            _trainingImagesPath = Path.Combine(RootPath, TrainingDirectory);
+            Directory.CreateDirectory(_trainingImagesPath);
+            _validationImagesPath = Path.Combine(RootPath, ValidationDirectory);
+            Directory.CreateDirectory(_validationImagesPath);
             AnnotationsPath = Path.Combine(RootPath, AnnotationDirectory);
             Directory.CreateDirectory(AnnotationsPath);
 
@@ -66,17 +69,31 @@ namespace MapleStory.Sampler
         public void Write(Sample sample)
         {
             double rand = _random.NextDouble();
+            List<CocoAnnotation> annotationsToAdd;
+            List<CocoImage> imagesToAdd;
+            string pathToWrite;
+            if (rand < DefaultTestingPortion)
+            {
+                annotationsToAdd = _validationAnnotations;
+                imagesToAdd = _validationImages;
+                pathToWrite = _validationImagesPath;
+            }
+            else
+            {
+                annotationsToAdd = _trainingAnnotations;
+                imagesToAdd = _trainingImages;
+                pathToWrite = _trainingImagesPath;
+            }
             // Write image
             string jpgFileName = sample.Guid + ".jpg";
-            using FileStream imageStream = new FileStream(Path.Combine(ImagesPath, jpgFileName), FileMode.CreateNew);
+            using FileStream imageStream = new FileStream(Path.Combine(pathToWrite, jpgFileName), FileMode.CreateNew);
             sample.ImageStream.WriteTo(imageStream);
             imageStream.Flush();
             CocoImage cocoImage = new CocoImage(jpgFileName, sample.Width, sample.Height);
-            (rand < DefaultTestingPortion ? _validationImages : _trainingImages).Add(cocoImage);
+            imagesToAdd.Add(cocoImage);
 
             // Write annotations
-            List<CocoAnnotation> listToAdd = rand < DefaultTestingPortion ? _validationAnnotations : _trainingAnnotations;
-            GetAnnotationFromSample(sample, cocoImage.Id, ref listToAdd);
+            GetAnnotationFromSample(sample, cocoImage.Id, ref annotationsToAdd);
         }
 
         public void Finish()
