@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.31112.23
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MapleStory.Common", "MapleStory.Common\MapleStory.Common.csproj", "{43F1F84E-0B40-4AAD-9BC9-B6100CAB1D4C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CharaSimResource", "CharaSimResource\CharaSimResource.csproj", "{54797F38-A12C-4202-92A4-1A3DDCE914B7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CharaSimResource", "WzComparerR2\CharaSimResource\CharaSimResource.csproj", "{54797F38-A12C-4202-92A4-1A3DDCE914B7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WzComparerR2", "WzComparerR2\WzComparerR2\WzComparerR2.csproj", "{5E883BE2-2009-4517-8026-4B90DEB83884}"
 EndProject

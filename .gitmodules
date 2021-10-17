@@ -2,7 +2,3 @@
 	path = WzComparerR2
 	url = git@github.com:charlescao460/WzComparerR2.git
 	branch = .
-[submodule "CharaSimResource"]
-	path = CharaSimResource
-	url = git@github.com:Kagamia/CharaSimResource.git
-	branch = master
