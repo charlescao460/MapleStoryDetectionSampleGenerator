@@ -19,8 +19,8 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 # Build
 1. Clone this repository with submodules by </br> `git clone --recursive git@github.com:charlescao460/MapleStoryDetectionSampleGenerator.git`. </br>Note that `--recursive` is necessary.
 2. Build `WzComparerR2/WzComparerR2.sln` (submodule MUST be built first)
-3. Run `MapleStory.MachineLearningSampleGenerator\bin\Release\net5.0-windows\WzComparerR2.exe`. Running `WzComparerR2.exe` will generate `Setting.config`, which is required for our MapRender.
-4. Build `MapleStoryDetectionSampleGenerator.sln`
+3. Build `MapleStoryDetectionSampleGenerator.sln`
+4. Run `MapleStory.MachineLearningSampleGenerator\bin\Release\net5.0-windows\WzComparerR2.exe`. Running `WzComparerR2.exe` will generate `Setting.config`, which is required for our MapRender.
 
 # Run
 (Assuming assemblies are built with `Release` configuration. `Debug` configuration is similar)
