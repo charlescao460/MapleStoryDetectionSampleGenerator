@@ -6,11 +6,10 @@
   <ItemGroup>
     <PackageReference Include="System.Drawing.Common" Version="5.0.2" />
     <PackageReference Include="System.Text.Json" Version="5.0.2" />
+	<PackageReference Include="ManagedBass" Version="3.1.0" />
+	<PackageReference Include="MonoGame.Framework.WindowsDX" Version="3.8.0.1641" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MapRender.Invoker\MapRender.Invoker.csproj" />
   </ItemGroup>
-  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="cd $(ProjectDir)protobuf&#xD;&#xA;$(ProjectDir)..\Tools\protogen\protogen.exe --csharp_out=.\  feature.proto&#xD;&#xA;$(ProjectDir)..\Tools\protogen\protogen.exe --csharp_out=.\  example.proto" />
-  </Target>
 </Project>

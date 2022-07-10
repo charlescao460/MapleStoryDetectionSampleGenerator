@@ -77,7 +77,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
             public string MapleStoryPath { get; set; }
 
-            [Option("post", Required = false, Default = "", HelpText = "Indicate whether to enable post-processing.")]
+            [Option("post", Required = false, Default = false, HelpText = "Indicate whether to enable post-processing.")]
             public bool PostProcessingEnable { get; set; }
 
             [Option("players", Required = false, Default = "", HelpText = "Directory where the post-processing player images stored.")]
