@@ -30,7 +30,7 @@ namespace MapRender.Invoker
         {
             Name = item.Name;
             Index = item.Index;
-            Tag = item.Tag;
+            Tags = item.Tags;
         }
 
         public TargetItem(SceneItem item, Rectangle rectangle) : this(item)

@@ -124,6 +124,10 @@ namespace MapleStory.MachineLearningSampleGenerator
             var first = maps.Dequeue();
             renderInvoker.LoadMap(first);
             renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
+            while (true) 
+            { 
+                Thread.Sleep(1000); 
+            }
             // Initialize sampler
             IDatasetWriter writer = GetDatasetWriter(options, first);
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);

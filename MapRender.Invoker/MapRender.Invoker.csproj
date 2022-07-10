@@ -1,10 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
+    <TargetFramework>net6.0-windows</TargetFramework>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Crc32C.NET" Version="1.0.5" />
+    <PackageReference Include="ManagedBass" Version="3.1.0" />
+    <PackageReference Include="MonoGame.Framework.WindowsDX" Version="3.8.0.1641" />
     <PackageReference Include="protobuf-net" Version="3.0.101" />
   </ItemGroup>
   <ItemGroup>
@@ -25,9 +27,6 @@
     </Reference>
     <Reference Include="EmptyKeys.UserInterface.Core">
       <HintPath>..\WzComparerR2\References\EmptyKeys.UserInterface.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="MonoGame.Framework">
-      <HintPath>..\WzComparerR2\References\MonoGame.Framework.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>
