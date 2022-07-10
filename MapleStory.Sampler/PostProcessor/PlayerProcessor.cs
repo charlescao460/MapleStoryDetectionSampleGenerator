@@ -29,7 +29,7 @@ namespace MapleStory.Sampler.PostProcessor
                 throw new FileNotFoundException($"{directory} is not a valid directory!");
             }
             _random = new Random();
-            _playerImages = Directory.GetFiles(directory, "*.bmp").Select(Image.FromFile);
+            _playerImages = Directory.GetFiles(directory, "*.*").Where(f => f.EndsWith(".png") || f.EndsWith(".bmp")).Select(Image.FromFile);
             _numImages = _playerImages.Count();
             if (_numImages == 0)
             {
