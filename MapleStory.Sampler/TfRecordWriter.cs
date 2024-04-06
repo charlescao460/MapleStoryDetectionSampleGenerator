@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Crc32C;
+using Force.Crc32;
 
 namespace MapleStory.Sampler
 {

@@ -19,8 +19,9 @@ namespace MapRender.Invoker
         private volatile Stream _screenShotStream;
         private volatile ScreenShotData _screenShotData;
 
-        public MapRender(Wz_Image img) : base(img)
+        public MapRender(Wz_Image img) : base()
         {
+            LoadMap(img);
         }
 
         public void ChangeResolution(int width, int height)

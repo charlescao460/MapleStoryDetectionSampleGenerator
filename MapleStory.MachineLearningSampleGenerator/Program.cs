@@ -91,7 +91,7 @@ namespace MapleStory.MachineLearningSampleGenerator
         private static int Main(string[] args)
         {
             int ret = CommandLine.Parser.Default.ParseArguments<Options>(args).MapResult(RunAndReturn, OnParseError);
-            Console.WriteLine("MapleStory_TFRecord_Preparer exited with code= {0}", ret);
+            Console.WriteLine("MapleStoryDetectionSampleGenerator exited with code= {0}", ret);
             FreeConsole();
             return ret;
         }
@@ -124,6 +124,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             var first = maps.Dequeue();
             renderInvoker.LoadMap(first);
             renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
+            Thread.Sleep(10000);
             // Initialize sampler
             IDatasetWriter writer = GetDatasetWriter(options, first);
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);

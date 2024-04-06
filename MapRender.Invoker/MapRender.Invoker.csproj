@@ -1,12 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Crc32C.NET" Version="1.0.5" />
-    <PackageReference Include="protobuf-net" Version="3.0.101" />
-  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj" />
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.Avatar\WzComparerR2.Avatar.csproj" />
