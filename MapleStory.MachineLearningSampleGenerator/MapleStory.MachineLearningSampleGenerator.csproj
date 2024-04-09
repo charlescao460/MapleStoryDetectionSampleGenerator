@@ -12,6 +12,6 @@
         <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
     </ItemGroup>
     <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-      <Exec Command="xcopy &quot;$(ProjectDir)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\*&quot; &quot;$(TargetDir)&quot; /I /Y /S" />
+      <Exec Command="xcopy &quot;$(ProjectDir)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\$(TargetFramework)\*&quot; &quot;$(TargetDir)&quot; /I /Y /S" />
     </Target>
 </Project>
