@@ -255,6 +255,7 @@ namespace MapRender.Invoker
             Wz_Structure.DefaultAutoDetectExtFiles = true;
             Wz_Structure.DefaultEncoding = encoding;
             Wz_Structure.DefaultImgCheckDisabled = disableImgCheck;
+            Wz_Structure.DefaultWzVersionVerifyMode = WzVersionVerifyMode.Fast;
             // Then our constructor
             string baseWzPath = Path.Combine(mapleStoryPath, MapleStoryPathHelper.MapleStoryBaseWzName);
             if (!File.Exists(baseWzPath))
