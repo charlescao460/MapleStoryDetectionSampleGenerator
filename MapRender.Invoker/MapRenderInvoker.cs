@@ -106,7 +106,6 @@ namespace MapRender.Invoker
                     {
                         _mapRender.RunOneFrame(); // Initialize
                         _mapRender.ChangeResolution(width, height);
-                        _isRunning = true;
                         _camera = _mapRender.renderEnv.Camera;
                         _mapRender.Run();
                     }
@@ -121,8 +120,13 @@ namespace MapRender.Invoker
             _renderThread.SetApartmentState(ApartmentState.STA);
             _renderThread.IsBackground = true;
             _renderThread.Start();
-
-            while (!_isRunning) ; // Wait until ready
+            SpinWait spinWait = new SpinWait();
+            while (_mapRender == null)
+            {
+                spinWait.SpinOnce();
+            }
+            _mapRender.WaitSceneLoading();
+            _isRunning = true;
         }
 
         public override void SwitchMap(string imgText)

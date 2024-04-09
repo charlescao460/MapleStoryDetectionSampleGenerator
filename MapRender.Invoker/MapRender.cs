@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -56,7 +57,17 @@ namespace MapRender.Invoker
         public void SwitchToNewMap(int imgId)
         {
             MoveToPortal(imgId, null);
-            while (!SceneRunning) ; // Wait until new map loaded
+            WaitSceneLoading();
+        }
+
+        public void WaitSceneLoading()
+        {
+            SpinWait spinWait = new SpinWait();
+            // Wait until new map loaded
+            while (!SceneRunning)
+            {
+                spinWait.SpinOnce();
+            }
         }
 
         protected override void Draw(GameTime gameTime)
