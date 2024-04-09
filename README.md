@@ -20,11 +20,11 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 1. Clone this repository with submodules by </br> `git clone --recursive git@github.com:charlescao460/MapleStoryDetectionSampleGenerator.git`. </br>Note that `--recursive` is necessary.
 2. Build `WzComparerR2/WzComparerR2.sln` (submodule MUST be built first)
 3. Build `MapleStoryDetectionSampleGenerator.sln`
-4. Run `MapleStory.MachineLearningSampleGenerator\bin\Release\net5.0-windows\WzComparerR2.exe`. Running `WzComparerR2.exe` will generate `Setting.config`, which is required for our MapRender.
+4. Run `MapleStory.MachineLearningSampleGenerator\bin\Release\net8.0-windows7.0\WzComparerR2.exe`. Running `WzComparerR2.exe` will generate `Setting.config`, which is required for our MapRender.
 
 # Run
 (Assuming assemblies are built with `Release` configuration. `Debug` configuration is similar)
-1. Cd into executable directory: `cd MapleStory.MachineLearningSampleGenerator\bin\Release\net5.0-windows`
+1. Cd into executable directory: `cd MapleStory.MachineLearningSampleGenerator\bin\Release\net8.0-windows7.0`
 2. Use `WzComparerR2.exe` to find the desired map you want to sample. Assuming `993134200.img` is the map you want in Limina.
 3. Prepare your player PNGs in a directory. </br>Since WzComparerR2 does not have Avatar supported inside MapRender, we have to draw player images in our post-processing steps. Player images should be transparent PNGs with only the player's appearance. You can get these PNGs by Photoshop or save from WzComparerR2's Avatar plugin. Assuming `.\players` is the directory containing all images
 4. Run ```.\MapleStory.MachineLearningSampleGenerator.exe -m 993134200 -x 5 -y 5 -f coco -o ".\output" --post --players ".\players"```</br>
