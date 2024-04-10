@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MapRender.Invoker;
+using SharpDX.MediaFoundation;
 using Encoder = System.Drawing.Imaging.Encoder;
 
 namespace MapleStory.Sampler
@@ -32,17 +33,20 @@ namespace MapleStory.Sampler
             }
         }
 
-        public Sample SampleSingle()
+        public Task<Sample> SampleSingleAsync()
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
             var items = FilterTargetsInCamera(screenShotData);
             int width = screenShotData.CameraRectangle.Width;
             int height = screenShotData.CameraRectangle.Height;
-            Sample ret = new Sample(stream, items, width, height);
-            OnSampleCaptured?.Invoke(ret, null);
-            ret.ImageStream = EncodeScreenShot(ret.ImageStream);
-            return ret;
+            return Task.Run(() =>
+            {
+                Sample ret = new Sample(stream, items, width, height);
+                OnSampleCaptured?.Invoke(ret, null);
+                ret.ImageStream = EncodeScreenShot(ret.ImageStream);
+                return ret;
+            });
         }
 
         /// <summary>
@@ -64,20 +68,48 @@ namespace MapleStory.Sampler
             int count = 0;
             int total = (int)(Math.Round((double)(endX - initX) / xStep, MidpointRounding.ToPositiveInfinity) *
                          Math.Round((double)(endY - initY) / yStep, MidpointRounding.ToPositiveInfinity));
+            HashSet<Task> writingTasks = new HashSet<Task>();
+            Queue<Task> completedTasks = new Queue<Task>();
 
             for (int x = initX; x < endX; x += xStep)
             {
                 for (int y = initY; y < endY; y += yStep)
                 {
                     Console.WriteLine($"Sampling at center x={x},y={y}....");
+                    // Move Camera
                     _renderInvoker.MoveCamera(x, y);
-                    Sample sample = SampleSingle();
-                    Console.WriteLine($"Writing {sample.Guid.ToString()} to dataset...");
-                    writer.Write(sample);
-                    count++;
-                    Console.WriteLine($"Done writing. Progress: {count}/{total}, {(double)count / total * 100}%\n");
+                    // Do sample
+                    writingTasks.Add(SampleSingleAsync().ContinueWith(s =>
+                    {
+                        lock (writer)
+                        {
+                            writer.Write(s.Result);
+                        }
+                    }));
+                    // Check pending tasks
+                    foreach (var task in writingTasks)
+                    {
+                        if (task.Exception != null)
+                        {
+                            throw task.Exception;
+                        }
+                        if (task.IsCompleted)
+                        {
+                            count++;
+                            completedTasks.Enqueue(task);
+                            Console.WriteLine($"Progress: {count}/{total}, {(double)count / total * 100}%\n");
+                        }
+                    }
+                    foreach (var task in completedTasks)
+                    {
+                        writingTasks.Remove(task);
+                    }
                     Thread.Sleep(interval);
                 }
+            }
+            foreach (var task in writingTasks)
+            {
+                task.GetAwaiter().GetResult();
             }
             Console.WriteLine("############## All Samples Captured ##############");
             return;
