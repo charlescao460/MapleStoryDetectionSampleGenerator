@@ -1,6 +1,6 @@
 # MapleStoryDetectionSampleGenerator
 Generate Machine Learning Samples Object Detection In MapleStory
-![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/master/pictures/result.png)
+![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/pictures/result.png)
 
 
 
@@ -10,7 +10,7 @@ This generator can generate arbitrarily many annotated samples. All bounding box
 With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.cfg) and ~5000 samples, it can achieve 99.8%mAP in test set.
 
 
-![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/master/pictures/chart_yolov4-custom.png)
+![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/pictures/chart_yolov4-custom.png)
 
 # Requirement
 * Visual Studio 2019 v16.8 or above with .NET workload installed
@@ -29,10 +29,10 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 3. Prepare your player PNGs in a directory. </br>Since WzComparerR2 does not have Avatar supported inside MapRender, we have to draw player images in our post-processing steps. Player images should be transparent PNGs with only the player's appearance. You can get these PNGs by Photoshop or save from WzComparerR2's Avatar plugin. Assuming `.\players` is the directory containing all images
 4. Run ```.\MapleStory.MachineLearningSampleGenerator.exe -m 993134200 -x 5 -y 5 -f coco -o ".\output" --post --players ".\players"```</br>
 This means run the sampler in map 993134200.img with every 5 pixels in X and every 5 pixels in Y, outputing COCO format, and drawing players in post processor. </br>
-You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage hint. Also you can take a look of the entrypoint [Program.cs](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/master/MapleStory.MachineLearningSampleGenerator/Program.cs)
+You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage hint. Also you can take a look of the entrypoint [Program.cs](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/MapleStory.MachineLearningSampleGenerator/Program.cs)
 
 # Note
-* Since NPCs look like players, including them without annotation could result a negative effect on our model. If you want to hide all NPCs from generated samples, simply change [WzComparerR2.MapRender/MapData.cs](https://github.com/Kagamia/WzComparerR2/blob/master/WzComparerR2.MapRender/MapData.cs) to prevent any NPC data loaded into map render. 
+* Since NPCs look like players, including them without annotation could result a negative effect on our model. If you want to hide all NPCs from generated samples, simply change [WzComparerR2.MapRender/MapData.cs](https://github.com/Kagamia/WzComparerR2/blob/main/WzComparerR2.MapRender/MapData.cs) to prevent any NPC data loaded into map render. 
 
 # Output Formats
 ## Tensorflow TFRecord
@@ -101,7 +101,7 @@ The COCO json is defined as following:
   },
   "licenses": [
     {
-      "url": "https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/master/LICENSE",
+      "url": "https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/LICENSE",
       "id": 1,
       "name": "MIT License"
     }

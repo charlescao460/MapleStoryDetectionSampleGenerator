@@ -192,7 +192,7 @@ namespace MapleStory.Sampler
         private class CocoLicense
         {
             [JsonPropertyName("url")]
-            public string Url { get; } = @"https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/master/LICENSE";
+            public string Url { get; } = @"https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/LICENSE";
 
             [JsonPropertyName("id")]
             public int Id { get; } = 1;
