@@ -13,8 +13,8 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 ![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/pictures/chart_yolov4-custom.png)
 
 # Requirement
-* Visual Studio 2019 v16.8 or above with .NET workload installed
-* .NET 5.0 SDK (5.0.0 or above)
+* Visual Studio 2022 v17.8 or above, with .NET workload installed
+* .NET 8.0 SDK (8.0.0 or above)
 
 # Build
 1. Clone this repository with submodules by </br> `git clone --recursive git@github.com:charlescao460/MapleStoryDetectionSampleGenerator.git`. </br>Note that `--recursive` is necessary.
