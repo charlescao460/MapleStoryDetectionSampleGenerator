@@ -4,10 +4,10 @@
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Drawing.Common" Version="8.0.3" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.11" />
     <PackageReference Include="System.Text.Json" Version="8.0.3" />
 	<PackageReference Include="ManagedBass" Version="3.1.1" />
-	<PackageReference Include="MonoGame.Framework.WindowsDX" Version="3.8.1.303" />
+	<PackageReference Include="MonoGame.Framework.WindowsDX" Version="3.8.2.1105" />
     <PackageReference Include="Crc32.NET" Version="1.2.0" />
     <PackageReference Include="protobuf-net" Version="3.2.30" />
   </ItemGroup>

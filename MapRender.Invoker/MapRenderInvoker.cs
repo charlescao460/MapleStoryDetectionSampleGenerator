@@ -253,6 +253,14 @@ namespace MapRender.Invoker
 
         protected readonly Wz_Structure _wzStructure;
 
+        /// <summary>
+        /// Provide base methods to open MapleStory data directory.
+        /// For maintenance with upstream WzR2, check <see cref="WzComparerR2.MainForm.openWz"/>
+        /// </summary>
+        /// <param name="mapleStoryPath"></param>
+        /// <param name="encoding"></param>
+        /// <param name="disableImgCheck"></param>
+        /// <exception cref="ArgumentException"></exception>
         protected MapRenderInvokerBase(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
         {
             // Static settings for Wz_Structure :(
@@ -266,10 +274,26 @@ namespace MapRender.Invoker
             {
                 throw new ArgumentException($"Cannot find {MapleStoryPathHelper.MapleStoryBaseWzName} in given directory {mapleStoryPath}.");
             }
+            // See WzComparerR2.MainForm.openWz()
             _wzStructure = new Wz_Structure();
-            if (_wzStructure.IsKMST1125WzFormat(baseWzPath))
+            if (string.Equals(Path.GetExtension(baseWzPath), ".ms", StringComparison.OrdinalIgnoreCase))
+            {
+                _wzStructure.LoadMsFile(baseWzPath);
+            }
+            else if (_wzStructure.IsKMST1125WzFormat(baseWzPath))
             {
                 _wzStructure.LoadKMST1125DataWz(baseWzPath);
+                if (string.Equals(Path.GetFileName(baseWzPath), "Base.wz", StringComparison.OrdinalIgnoreCase))
+                {
+                    string packsDir = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(baseWzPath)), "Packs");
+                    if (Directory.Exists(packsDir))
+                    {
+                        foreach (var msFile in Directory.GetFiles(packsDir, "*.ms"))
+                        {
+                            _wzStructure.LoadMsFile(msFile);
+                        }
+                    }
+                }
             }
             else
             {
