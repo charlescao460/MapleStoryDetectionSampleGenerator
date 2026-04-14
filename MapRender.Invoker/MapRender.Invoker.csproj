@@ -5,7 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj" />
-    <ProjectReference Include="..\WzComparerR2\WzComparerR2.Avatar\WzComparerR2.Avatar.csproj" />
+    <ProjectReference Include="..\WzComparerR2\CharaSimResource\CharaSimResource.csproj" />
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.Common\WzComparerR2.Common.csproj" />
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.MapRender\WzComparerR2.MapRender.csproj" />
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.PluginBase\WzComparerR2.PluginBase.csproj" />

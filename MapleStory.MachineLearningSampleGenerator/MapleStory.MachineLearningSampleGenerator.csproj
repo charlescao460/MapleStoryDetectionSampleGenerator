@@ -11,7 +11,32 @@
     <ItemGroup>
         <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
     </ItemGroup>
-    <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-      <Exec Command="xcopy &quot;$(ProjectDir)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\$(TargetFramework)\*&quot; &quot;$(TargetDir)&quot; /I /Y /S" />
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+        <Content Include="..\WzComparerR2\References\x86\*.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <TargetPath>Lib\x86\%(Filename)%(Extension)</TargetPath>
+        </Content>
+        <Content Include="..\WzComparerR2\References\x64\*.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <TargetPath>Lib\x64\%(Filename)%(Extension)</TargetPath>
+        </Content>
+        <Content Include="..\WzComparerR2\References\ARM64\*.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <TargetPath>Lib\ARM64\%(Filename)%(Extension)</TargetPath>
+        </Content>
+    </ItemGroup>
+    <Target Name="StageWzComparerMapRenderPlugin" AfterTargets="Build">
+        <PropertyGroup>
+            <_MapRenderPluginSourceDir>$(MSBuildThisFileDirectory)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\$(TargetFramework)\Plugin\WzComparerR2.MapRender\</_MapRenderPluginSourceDir>
+            <_MapRenderPluginTargetDir>$(TargetDir)Plugin\WzComparerR2.MapRender\</_MapRenderPluginTargetDir>
+        </PropertyGroup>
+        <RemoveDir Directories="$(_MapRenderPluginTargetDir)" Condition="Exists('$(_MapRenderPluginTargetDir)')" />
+        <ItemGroup Condition="Exists('$(_MapRenderPluginSourceDir)')">
+            <_MapRenderPluginFiles Include="$(_MapRenderPluginSourceDir)**\*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_MapRenderPluginFiles)"
+              DestinationFiles="@(_MapRenderPluginFiles->'$(_MapRenderPluginTargetDir)%(RecursiveDir)%(Filename)%(Extension)')"
+              SkipUnchangedFiles="true"
+              Condition="'@(_MapRenderPluginFiles)' != ''" />
     </Target>
 </Project>
