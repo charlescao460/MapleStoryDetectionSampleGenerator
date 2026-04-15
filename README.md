@@ -13,18 +13,16 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 ![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/pictures/chart_yolov4-custom.png)
 
 # Requirement
-* Visual Studio 2022 v17.8 or above, with .NET workload installed
-* .NET 8.0 SDK (8.0.0 or above)
+* .NET 10.0 SDK (10.0.0 or above)
 
 # Build
 1. Clone this repository with submodules by </br> `git clone --recursive git@github.com:charlescao460/MapleStoryDetectionSampleGenerator.git`. </br>Note that `--recursive` is necessary.
-2. Build `WzComparerR2/WzComparerR2.sln` (submodule MUST be built first)
-3. Build `MapleStoryDetectionSampleGenerator.sln`
-4. Run `MapleStory.MachineLearningSampleGenerator\bin\Release\net8.0-windows7.0\WzComparerR2.exe`. Running `WzComparerR2.exe` will generate `Setting.config`, which is required for our MapRender.
+2. Build `MapleStoryDetectionSampleGenerator.sln`
+3. Run `MapleStory.MachineLearningSampleGenerator\bin\Release\net10.0-windows7.0\WzComparerR2.exe` and open MapRender once. Running `WzComparerR2.exe` will generate `Setting.config`, which is required for our MapRender invoker.
 
 # Run
 (Assuming assemblies are built with `Release` configuration. `Debug` configuration is similar)
-1. Cd into executable directory: `cd MapleStory.MachineLearningSampleGenerator\bin\Release\net8.0-windows7.0`
+1. Cd into executable directory: `cd MapleStory.MachineLearningSampleGenerator\bin\Release\net10.0-windows7.0`
 2. Use `WzComparerR2.exe` to find the desired map you want to sample. Assuming `993134200.img` is the map you want in Limina.
 3. Prepare your player PNGs in a directory. </br>Since WzComparerR2 does not have Avatar supported inside MapRender, we have to draw player images in our post-processing steps. Player images should be transparent PNGs with only the player's appearance. You can get these PNGs by Photoshop or save from WzComparerR2's Avatar plugin. Assuming `.\players` is the directory containing all images
 4. Run ```.\MapleStory.MachineLearningSampleGenerator.exe -m 993134200 -x 5 -y 5 -f coco -o ".\output" --post --players ".\players"```</br>
@@ -32,7 +30,7 @@ This means run the sampler in map 993134200.img with every 5 pixels in X and eve
 You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage hint. Also you can take a look of the entrypoint [Program.cs](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/MapleStory.MachineLearningSampleGenerator/Program.cs)
 
 # Note
-* Since NPCs look like players, including them without annotation could result a negative effect on our model. If you want to hide all NPCs from generated samples, simply change [WzComparerR2.MapRender/MapData.cs](https://github.com/Kagamia/WzComparerR2/blob/main/WzComparerR2.MapRender/MapData.cs) to prevent any NPC data loaded into map render. 
+* Since NPCs look like players, including them without annotation could result a negative effect on our model. Therefore, by default, we changed [WzComparerR2.MapRender/MapData.cs](https://github.com/Kagamia/WzComparerR2/blob/main/WzComparerR2.MapRender/MapData.cs) to prevent any NPC data loaded into map render when invoking from `MapleStory.MachineLearningSampleGenerator.exe`,
 
 # Output Formats
 ## Tensorflow TFRecord
