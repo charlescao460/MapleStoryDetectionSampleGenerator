@@ -2,17 +2,12 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using CommandLine;
-using CommandLine.Text;
 using MapleStory.Common;
+using MapleStory.MachineLearningSampleGenerator.Configuration;
 using MapleStory.Sampler;
-using MapleStory.Sampler.PostProcessor;
 using MapRender.Invoker;
 
 namespace MapleStory.MachineLearningSampleGenerator
@@ -48,201 +43,115 @@ namespace MapleStory.MachineLearningSampleGenerator
             SetDllDirectory(libPath); // Add dll search path for WzComparerR2
         }
 
-        private class Options
-        {
-            [Option('m', "map", Required = true, HelpText = "Space-separated Wz image ID of map(s) used for generating TFRecord.")]
-            public IEnumerable<string> Maps { get; set; }
-
-            [Option('x', "xStep", Required = true, HelpText = "Step in X.")]
-            public int StepX { get; set; }
-
-            [Option('y', "yStep", Required = true, HelpText = "Step in Y.")]
-            public int StepY { get; set; }
-
-            [Option('f', "format", Required = true, HelpText = "Output format, must be one of: [tfrecord, darknet, coco]")]
-            public string Format { get; set; }
-
-            [Option('o', "output", Required = false, Default = ".", HelpText = "Data set output location")]
-            public string OutputPath { get; set; }
-
-            [Option('w', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
-            public int RenderWidth { get; set; }
-
-            [Option('h', "height", Required = false, Default = 768, HelpText = "Height of sample image.")]
-            public int RenderHeight { get; set; }
-
-            [Option('i', "interval", Required = false, Default = 0, HelpText = "Time interval in ms between each sample")]
-            public int SampleInterval { get; set; }
-
-            [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
-            public string MapleStoryPath { get; set; }
-
-            [Option("post", Required = false, Default = false, HelpText = "Indicate whether to enable post-processing.")]
-            public bool PostProcessingEnable { get; set; }
-
-            [Option("players", Required = false, Default = "", HelpText = "Directory where the post-processing player images stored.")]
-            public string PlayerImageDirectory { get; set; }
-
-            [Option('e', "encoding", Required = false, HelpText = "Encoding used to decode Wz strings. Using system default if not specified.")]
-            public string Encoding { get; set; } = "";
-        }
-
         [STAThread]
         private static int Main(string[] args)
         {
-            int ret = CommandLine.Parser.Default.ParseArguments<Options>(args).MapResult(RunAndReturn, OnParseError);
-            Console.WriteLine("MapleStoryDetectionSampleGenerator exited with code= {0}", ret);
-            FreeConsole();
-            return ret;
-        }
-
-        private static int OnParseError(IEnumerable<Error> errors)
-        {
-            foreach (var error in errors)
+            int ret = -1;
+            try
             {
-                Console.Error.WriteLine(Enum.GetName(typeof(ErrorType), error.Tag));
+                BootstrapArguments bootstrapArguments = BootstrapArgumentsParser.Parse(args);
+                if (bootstrapArguments.ShowHelp)
+                {
+                    PrintBanner();
+                    Console.WriteLine(GetHelpText());
+                    ret = 0;
+                    return ret;
+                }
+
+                if (bootstrapArguments.ShowVersion)
+                {
+                    PrintBanner();
+                    ret = 0;
+                    return ret;
+                }
+
+                PrintBanner();
+                ConfigurationLoader loader = new ConfigurationLoader();
+                ConfigurationResolver resolver = new ConfigurationResolver();
+                GeneratorConfig config = loader.Load(bootstrapArguments.ConfigPath);
+                ResolvedRunConfig runConfig = resolver.Resolve(config, bootstrapArguments.ConfigPath);
+
+                Console.WriteLine("Configuration: {0}", runConfig.ConfigPath);
+                Console.WriteLine("MapleStory Location: {0}", runConfig.MapleStoryPath);
+                ret = Run(runConfig);
             }
-            return -1;
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+            }
+            finally
+            {
+                Console.WriteLine("MapleStoryDetectionSampleGenerator exited with code= {0}", ret);
+                FreeConsole();
+            }
+
+            return ret;
         }
 
         /// <summary>
         /// Main logic here
         /// </summary>
-        private static int RunAndReturn(Options options)
+        private static int Run(ResolvedRunConfig config)
         {
-            // Print program info
-            Console.WriteLine(HeadingInfo.Default);
-            Console.WriteLine(FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).LegalCopyright);
-            // Check arguments
-            PreRunTest(options);
-            Console.WriteLine("MapleStory Location: {0}", options.MapleStoryPath);
-            // Initialize render
-            MapRenderInvoker renderInvoker = new MapRenderInvoker(options.MapleStoryPath,
-                options.Encoding == string.Empty ? Encoding.Default : Encoding.GetEncoding(options.Encoding),
-                false);
-            Queue<string> maps = new Queue<string>(options.Maps);
-            var first = maps.Dequeue();
-            renderInvoker.LoadMap(first);
-            renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
-            // Initialize sampler
-            IDatasetWriter writer = GetDatasetWriter(options, first);
-            Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-            if (options.PostProcessingEnable && options.PlayerImageDirectory != "")
-            {
-                IPostProcessor postProcessor = new PlayerProcessor(options.PlayerImageDirectory);
-                sampler.OnSampleCaptured += (s, e) => postProcessor.Process(s);
-            }
+            MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
+            Queue<ResolvedMapConfig> maps = new Queue<ResolvedMapConfig>(config.Maps);
+            ResolvedMapConfig firstMap = maps.Dequeue();
+            renderInvoker.LoadMap(firstMap.Id);
+            renderInvoker.Launch(config.RenderWidth, config.RenderHeight);
 
+            IDatasetWriter writer = GetDatasetWriter(config);
+            Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
             while (true)
             {
-                sampler.SampleAll(options.StepX, options.StepY, writer, options.SampleInterval);
+                IReadOnlyList<MapleStory.Sampler.PostProcessor.IPostProcessor> postProcessors =
+                    PostProcessorFactory.Create(firstMap.PostProcessors);
+                sampler.SampleAll(firstMap.XStep, firstMap.YStep, writer, firstMap.IntervalMs, postProcessors);
                 if (maps.Count == 0)
                 {
                     break;
                 }
-                renderInvoker.SwitchMap(maps.Dequeue());
+
+                firstMap = maps.Dequeue();
+                renderInvoker.SwitchMap(firstMap.Id);
             }
             writer.Finish();
             return 0;
         }
 
-
-        /// <summary>
-        /// Throw if condition not meet.
-        /// </summary>
-        private static void PreRunTest(Options options)
+        private static IDatasetWriter GetDatasetWriter(ResolvedRunConfig config)
         {
-            // Check resolution
-            if (options.RenderHeight <= 0)
-            {
-                throw new ArgumentException("Render size cannot exceed screen size. Height illegal.",
-                    nameof(options.RenderHeight));
-            }
-            if (options.RenderWidth <= 0)
-            {
-                throw new ArgumentException("Render size cannot exceed screen size. Width illegal.",
-                    nameof(options.RenderWidth));
-            }
-
-            // Check format
-            Enum.Parse(typeof(OutputFormat), options.Format, true);
-
-            // Check file path
-            if (options.MapleStoryPath == string.Empty)
-            {
-                if (MapleStoryPathHelper.FoundMapleStoryInstalled)
-                {
-                    options.MapleStoryPath = MapleStoryPathHelper.MapleStoryInstallDirectory;
-                }
-                else
-                {
-                    throw new ArgumentException("Cannot find MapleStory installed location. Please specify it in commandline or retry as Administrator.");
-                }
-            }
-            else if (!Directory.Exists(options.MapleStoryPath))
-            {
-                throw new ArgumentException("Supplied MapleStory directory does not exist.");
-            }
-
-            // Check map id format
-            foreach (var map in options.Maps)
-            {
-                string id = map.Replace(".img", string.Empty);
-                if (!id.All(char.IsDigit))
-                {
-                    throw new ArgumentException("Supplied Map Id is not in correct format." +
-                                                " --map parameter should be space-separated list of IDs. " +
-                                                "E.g. --map 450007010 450007060");
-                }
-            }
-
-            // Check encoding
-            if ((options.Encoding != string.Empty) &&
-                Encoding.GetEncodings()
-                .Any(e => e.Name.Equals(options.Encoding, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new ArgumentException($"{options.Encoding} is not an available Encoding in your system.");
-            }
-
-            // Check output path
-            if (!Directory.Exists(options.OutputPath))
-            {
-                throw new ArgumentException($"OutputPath {options.OutputPath} does not exist.");
-            }
-
-            // Check interval
-            if (options.SampleInterval < 0)
-            {
-                throw new ArgumentException("SampleInterval cannot be negative!");
-            }
-
-            // Check for post-processing
-            if (options.PostProcessingEnable)
-            {
-                if (options.PlayerImageDirectory != "")
-                {
-                    if (!Directory.Exists(options.PlayerImageDirectory))
-                    {
-                        throw new ArgumentException($"PlayerImageDirectory {options.PlayerImageDirectory} cannot be found!");
-                    }
-                }
-            }
-        }
-
-        private static IDatasetWriter GetDatasetWriter(Options options, string map)
-        {
-            switch (Enum.Parse(typeof(OutputFormat), options.Format, true))
+            switch (config.OutputFormat)
             {
                 case OutputFormat.TfRecord:
-                    return new TfRecordWriter(Path.Combine(options.OutputPath, map));
+                    return new TfRecordWriter(Path.Combine(config.OutputPath, config.OutputName));
                 case OutputFormat.Darknet:
-                    return new DarknetWriter(options.OutputPath);
+                    return new DarknetWriter(config.OutputPath);
                 case OutputFormat.Coco:
-                    return new CocoWriter(options.OutputPath, $"MapleStory {map}.img Object Detection Samples");
+                    return new CocoWriter(config.OutputPath, config.OutputName);
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(options), options, null);
+                    throw new ArgumentOutOfRangeException(nameof(config), config, null);
             }
         }
 
+        private static void PrintBanner()
+        {
+            AssemblyName assemblyName = Assembly.GetExecutingAssembly().GetName();
+            Console.WriteLine("{0} {1}", assemblyName.Name, assemblyName.Version);
+            Console.WriteLine(FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).LegalCopyright);
+        }
+
+        private static string GetHelpText()
+        {
+            return
+@"Usage:
+  MapleStory.MachineLearningSampleGenerator --config <path>
+  MapleStory.MachineLearningSampleGenerator --help
+  MapleStory.MachineLearningSampleGenerator --version
+
+Options:
+  -c, --config <path>   Path to the YAML configuration file.
+  -h, --help            Display this help screen.
+  -v, --version         Display version information.";
+        }
     }
 }

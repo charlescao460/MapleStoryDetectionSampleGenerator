@@ -1,0 +1,24 @@
+output:
+  format: coco
+  path: .
+  name: sample-generator
+
+render:
+  width: 1366
+  height: 768
+
+sampling:
+  xStep: 500
+  yStep: 500
+  intervalMs: 0
+
+postProcessors:
+  - type: player
+    imageDirectory: ./pictures
+
+maps:
+  - id: 993134200
+  - id: 450007010
+    sampling:
+      xStep: 250
+    postProcessors: []

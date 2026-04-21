@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using MapRender.Invoker;
+using MapleStory.Sampler.PostProcessor;
 using SharpDX.MediaFoundation;
 using Encoder = System.Drawing.Imaging.Encoder;
 
@@ -20,10 +21,6 @@ namespace MapleStory.Sampler
         private const double ITEM_PARTIAL_AREA_THRESHOLD = 0.70;
         private readonly MapRenderInvoker _renderInvoker;
 
-        public delegate void SamplePostProcessor(Sample sample, EventArgs e);
-
-        public event SamplePostProcessor OnSampleCaptured;
-
         public Sampler(MapRenderInvoker renderInvoker)
         {
             _renderInvoker = renderInvoker;
@@ -33,7 +30,7 @@ namespace MapleStory.Sampler
             }
         }
 
-        public Task<Sample> SampleSingleAsync()
+        public Task<Sample> SampleSingleAsync(IReadOnlyList<IPostProcessor> postProcessors = null)
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
@@ -43,7 +40,13 @@ namespace MapleStory.Sampler
             return Task.Run(() =>
             {
                 Sample ret = new Sample(stream, items, width, height);
-                OnSampleCaptured?.Invoke(ret, null);
+                if (postProcessors != null)
+                {
+                    foreach (var postProcessor in postProcessors)
+                    {
+                        postProcessor.Process(ret);
+                    }
+                }
                 ret.ImageStream = EncodeScreenShot(ret.ImageStream);
                 return ret;
             });
@@ -56,7 +59,9 @@ namespace MapleStory.Sampler
         /// <param name="yStep">step in Y to sample</param>
         /// <param name="writer">Writer to save result</param>
         /// <param name="interval">Sampling time interval, in ms.</param>
-        public void SampleAll(int xStep, int yStep, IDatasetWriter writer, int interval = 0)
+        /// <param name="postProcessors">Optional post-processing pipeline applied in order before encoding.</param>
+        public void SampleAll(int xStep, int yStep, IDatasetWriter writer, int interval = 0,
+            IReadOnlyList<IPostProcessor> postProcessors = null)
         {
             xStep = Math.Abs(xStep);
             yStep = Math.Abs(yStep);
@@ -79,7 +84,7 @@ namespace MapleStory.Sampler
                     // Move Camera
                     _renderInvoker.MoveCamera(x, y);
                     // Do sample
-                    writingTasks.Add(SampleSingleAsync().ContinueWith(s =>
+                    writingTasks.Add(SampleSingleAsync(postProcessors).ContinueWith(s =>
                     {
                         lock (writer)
                         {
