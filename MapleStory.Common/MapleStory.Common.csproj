@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.Common\WzComparerR2.Common.csproj" />
+    <ProjectReference Include="..\WzComparerR2\WzComparerR2.PluginBase\WzComparerR2.PluginBase.csproj" />
     <ProjectReference Include="..\WzComparerR2\WzComparerR2.WzLib\WzComparerR2.WzLib.csproj" />
   </ItemGroup>
 </Project>

@@ -201,13 +201,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 switch (postProcessor)
                 {
                     case PlayerPostProcessorConfig playerConfig:
-                        resolved.Add(new PlayerPostProcessorConfig
-                        {
-                            ImageDirectory = ResolveExistingDirectory(
-                                playerConfig.ImageDirectory,
-                                configDirectory,
-                                $"{context}[{index}].imageDirectory"),
-                        });
+                        resolved.Add(ResolvePlayerPostProcessor(playerConfig, $"{context}[{index}]"));
                         break;
                     case null:
                         throw new ConfigurationException($"{context}[{index}] cannot be null.");
@@ -218,6 +212,68 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             }
 
             return resolved.AsReadOnly();
+        }
+
+        private static PlayerPostProcessorConfig ResolvePlayerPostProcessor(
+            PlayerPostProcessorConfig config,
+            string context)
+        {
+            if (config.Count <= 0)
+            {
+                throw new ConfigurationException($"{context}.count must be greater than 0.");
+            }
+
+            List<string> actions = ResolveRequiredStringList(config.Actions, $"{context}.actions");
+            List<string> emotions = ResolveRequiredStringList(config.Emotions, $"{context}.emotions");
+            if (config.Avatars == null || config.Avatars.Count == 0)
+            {
+                throw new ConfigurationException($"{context}.avatars cannot be empty.");
+            }
+
+            List<PlayerAvatarConfig> avatars = new List<PlayerAvatarConfig>(config.Avatars.Count);
+            for (int i = 0; i < config.Avatars.Count; i++)
+            {
+                PlayerAvatarConfig avatar = config.Avatars[i];
+                string avatarContext = $"{context}.avatars[{i}].parts";
+                if (avatar?.Parts == null || avatar.Parts.Count == 0)
+                {
+                    throw new ConfigurationException($"{avatarContext} cannot be empty.");
+                }
+
+                if (avatar.Parts.Any(part => part < 0))
+                {
+                    throw new ConfigurationException($"{avatarContext} cannot contain negative IDs.");
+                }
+
+                avatars.Add(new PlayerAvatarConfig
+                {
+                    Parts = avatar.Parts.ToList(),
+                });
+            }
+
+            return new PlayerPostProcessorConfig
+            {
+                Count = config.Count,
+                Actions = actions,
+                Emotions = emotions,
+                Avatars = avatars,
+            };
+        }
+
+        private static List<string> ResolveRequiredStringList(IList<string> values, string context)
+        {
+            if (values == null || values.Count == 0)
+            {
+                throw new ConfigurationException($"{context} cannot be empty.");
+            }
+
+            List<string> resolved = new List<string>(values.Count);
+            for (int i = 0; i < values.Count; i++)
+            {
+                resolved.Add(RequireNonEmpty(values[i], $"{context}[{i}]"));
+            }
+
+            return resolved;
         }
 
         private static string ResolveMapId(string mapId, string context)

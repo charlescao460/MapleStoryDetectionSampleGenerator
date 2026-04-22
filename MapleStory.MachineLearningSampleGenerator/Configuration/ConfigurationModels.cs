@@ -70,7 +70,18 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         {
         }
 
-        public string ImageDirectory { get; set; } = string.Empty;
+        public int Count { get; set; } = 3;
+
+        public IList<string> Actions { get; set; } = new List<string> { "stand1" };
+
+        public IList<string> Emotions { get; set; } = new List<string> { "default" };
+
+        public IList<PlayerAvatarConfig> Avatars { get; set; } = new List<PlayerAvatarConfig>();
+    }
+
+    internal sealed class PlayerAvatarConfig
+    {
+        public IList<int> Parts { get; set; } = new List<int>();
     }
 
     internal sealed class ResolvedRunConfig

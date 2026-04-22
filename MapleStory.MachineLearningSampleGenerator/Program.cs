@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using MapleStory.Avatar;
 using MapleStory.Common;
 using MapleStory.MachineLearningSampleGenerator.Configuration;
 using MapleStory.Sampler;
@@ -94,6 +95,8 @@ namespace MapleStory.MachineLearningSampleGenerator
         private static int Run(ResolvedRunConfig config)
         {
             MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
+            using AvatarGenerator avatarGenerator = new AvatarGenerator(config.MapleStoryPath, config.TextEncoding, false);
+            AvatarPlayerFrameSource playerFrameSource = new AvatarPlayerFrameSource(avatarGenerator);
             Queue<ResolvedMapConfig> maps = new Queue<ResolvedMapConfig>(config.Maps);
             ResolvedMapConfig firstMap = maps.Dequeue();
             renderInvoker.LoadMap(firstMap.Id);
@@ -104,8 +107,16 @@ namespace MapleStory.MachineLearningSampleGenerator
             while (true)
             {
                 IReadOnlyList<MapleStory.Sampler.PostProcessor.IPostProcessor> postProcessors =
-                    PostProcessorFactory.Create(firstMap.PostProcessors);
-                sampler.SampleAll(firstMap.XStep, firstMap.YStep, writer, firstMap.IntervalMs, postProcessors);
+                    PostProcessorFactory.Create(firstMap.PostProcessors, playerFrameSource);
+                try
+                {
+                    sampler.SampleAll(firstMap.XStep, firstMap.YStep, writer, firstMap.IntervalMs, postProcessors);
+                }
+                finally
+                {
+                    DisposePostProcessors(postProcessors);
+                }
+
                 if (maps.Count == 0)
                 {
                     break;
@@ -116,6 +127,23 @@ namespace MapleStory.MachineLearningSampleGenerator
             }
             writer.Finish();
             return 0;
+        }
+
+        private static void DisposePostProcessors(
+            IReadOnlyList<MapleStory.Sampler.PostProcessor.IPostProcessor> postProcessors)
+        {
+            if (postProcessors == null)
+            {
+                return;
+            }
+
+            foreach (MapleStory.Sampler.PostProcessor.IPostProcessor postProcessor in postProcessors)
+            {
+                if (postProcessor is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
         }
 
         private static IDatasetWriter GetDatasetWriter(ResolvedRunConfig config)

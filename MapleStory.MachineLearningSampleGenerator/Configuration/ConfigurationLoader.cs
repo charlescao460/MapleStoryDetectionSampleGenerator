@@ -124,16 +124,31 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             {
                 string processorContext = $"{context}[{i}]";
                 Dictionary<string, YamlNode> processor = ToDictionary(RequireMapping(sequence.Children[i], processorContext), processorContext);
-                ValidateKeys(processor, processorContext, new[] { "type", "imageDirectory" }, new[] { "type" });
+                ValidateKeys(processor, processorContext, new[] { "type", "count", "actions", "emotions", "avatars", "imageDirectory" }, new[] { "type" });
 
                 string type = ReadRequiredString(processor, "type", $"{processorContext}.type").Trim();
                 switch (type.ToLowerInvariant())
                 {
                     case "player":
-                        ValidateKeys(processor, processorContext, new[] { "type", "imageDirectory" }, new[] { "type", "imageDirectory" });
+                        if (processor.ContainsKey("imageDirectory"))
+                        {
+                            throw new ConfigurationException(
+                                $"{processorContext}.imageDirectory is no longer supported. Configure generated avatars with {processorContext}.avatars[].parts.");
+                        }
+
+                        ValidateKeys(processor, processorContext, new[] { "type", "count", "actions", "emotions", "avatars" }, new[] { "type", "avatars" });
                         processors.Add(new PlayerPostProcessorConfig
                         {
-                            ImageDirectory = ReadRequiredString(processor, "imageDirectory", $"{processorContext}.imageDirectory"),
+                            Count = processor.TryGetValue("count", out YamlNode countNode)
+                                ? ParsePositiveInt(countNode, $"{processorContext}.count")
+                                : 3,
+                            Actions = processor.TryGetValue("actions", out YamlNode actionsNode)
+                                ? ParseStringSequence(actionsNode, $"{processorContext}.actions")
+                                : new List<string> { "stand1" },
+                            Emotions = processor.TryGetValue("emotions", out YamlNode emotionsNode)
+                                ? ParseStringSequence(emotionsNode, $"{processorContext}.emotions")
+                                : new List<string> { "default" },
+                            Avatars = ParsePlayerAvatars(processor["avatars"], $"{processorContext}.avatars"),
                         });
                         break;
                     default:
@@ -142,6 +157,29 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             }
 
             return processors;
+        }
+
+        private static IList<PlayerAvatarConfig> ParsePlayerAvatars(YamlNode node, string context)
+        {
+            YamlSequenceNode sequence = RequireSequence(node, context);
+            if (sequence.Children.Count == 0)
+            {
+                throw new ConfigurationException($"{context} cannot be empty.");
+            }
+
+            List<PlayerAvatarConfig> avatars = new List<PlayerAvatarConfig>(sequence.Children.Count);
+            for (int i = 0; i < sequence.Children.Count; i++)
+            {
+                string avatarContext = $"{context}[{i}]";
+                Dictionary<string, YamlNode> avatar = ToDictionary(RequireMapping(sequence.Children[i], avatarContext), avatarContext);
+                ValidateKeys(avatar, avatarContext, new[] { "parts" }, new[] { "parts" });
+                avatars.Add(new PlayerAvatarConfig
+                {
+                    Parts = ParseNonNegativeIntSequence(avatar["parts"], $"{avatarContext}.parts"),
+                });
+            }
+
+            return avatars;
         }
 
         private static Dictionary<string, YamlNode> ToDictionary(YamlMappingNode mapping, string context)
@@ -249,6 +287,57 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 throw new ConfigurationException($"{context} must be an integer.");
             }
             return value;
+        }
+
+        private static int ParsePositiveInt(YamlNode node, string context)
+        {
+            int value = ParseInt(node, context);
+            if (value <= 0)
+            {
+                throw new ConfigurationException($"{context} must be greater than 0.");
+            }
+
+            return value;
+        }
+
+        private static IList<int> ParseNonNegativeIntSequence(YamlNode node, string context)
+        {
+            YamlSequenceNode sequence = RequireSequence(node, context);
+            if (sequence.Children.Count == 0)
+            {
+                throw new ConfigurationException($"{context} cannot be empty.");
+            }
+
+            List<int> values = new List<int>(sequence.Children.Count);
+            for (int i = 0; i < sequence.Children.Count; i++)
+            {
+                int value = ParseInt(sequence.Children[i], $"{context}[{i}]");
+                if (value < 0)
+                {
+                    throw new ConfigurationException($"{context}[{i}] cannot be negative.");
+                }
+
+                values.Add(value);
+            }
+
+            return values;
+        }
+
+        private static IList<string> ParseStringSequence(YamlNode node, string context)
+        {
+            YamlSequenceNode sequence = RequireSequence(node, context);
+            if (sequence.Children.Count == 0)
+            {
+                throw new ConfigurationException($"{context} cannot be empty.");
+            }
+
+            List<string> values = new List<string>(sequence.Children.Count);
+            for (int i = 0; i < sequence.Children.Count; i++)
+            {
+                values.Add(ReadScalar(sequence.Children[i], $"{context}[{i}]", allowEmpty: false));
+            }
+
+            return values;
         }
     }
 }

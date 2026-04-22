@@ -24,7 +24,7 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 (Assuming assemblies are built with `Release` configuration. `Debug` configuration is similar)
 1. Use `WzComparerR2.exe` to find the desired map you want to sample. Assuming `993134200.img` is the map you want in Limina.
 2. From the solution root, prepare a YAML config file. A checked-in example is available at `sample-generator.yml`.
-3. If you want synthetic players, prepare transparent player PNGs in a directory. </br>Since WzComparerR2 does not have Avatar supported inside MapRender, we have to draw player images in our post-processing steps. Player images should be transparent PNGs with only the player's appearance. You can get these PNGs by Photoshop or save from WzComparerR2's Avatar plugin.
+3. If you want synthetic players, configure avatar WZ part IDs in the `player` post-processor. The generator renders player frames on the fly through `MapleStory.Avatar`.
 4. Run `dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config ".\sample-generator.yml"`</br>
 You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage hint, or execute the built binary directly with `--config <path>`. The config file is the single source of truth for maps, rendering, output, and post-processors.
 
@@ -46,7 +46,12 @@ sampling:
 
 postProcessors:
   - type: player
-    imageDirectory: ./pictures
+    count: 3
+    actions: [stand1, walk1, jump]
+    emotions: [default]
+    avatars:
+      - parts: [2000, 12003, 20000, 30000, 1040036, 1060026]
+      - parts: [2000, 12003, 20000, 30000, 1040036, 1060026, 1703598]
 
 maps:
   - id: 993134200
@@ -61,6 +66,8 @@ Notes about the YAML format:
 * Root `sampling` and `postProcessors` act as defaults for every map.
 * A map-level `sampling` block overrides only the fields it sets.
 * A map-level `postProcessors` block replaces the root processor list. `postProcessors: []` disables inherited processors for that map.
+* `player.count` is the number of generated player instances added to each sampled screenshot. It defaults to `3` when omitted.
+* `player.avatars[].parts` is an ordered list of WZ part IDs. Later IDs replace earlier slot conflicts, matching the avatar generator behavior.
 * Relative paths are resolved from the YAML file location.
 
 # Note

@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -49,21 +48,6 @@ namespace MapRender.Invoker
             : base(mapleStoryPath, encoding, disableImgCheck)
         {
             _isRunning = false;
-            AddFindWzEventHandler();
-        }
-
-        /// <summary>
-        /// Attach event handler to PlugManager, let it throw if reflection fail so we know there are changes in WzComparerR2
-        /// </summary>
-        /// <seealso cref="WzComparerR2.PluginBase.PluginManager.WzFileFinding"/>
-        private void AddFindWzEventHandler()
-        {
-            EventInfo findWzEvent = typeof(PluginManager)
-                .GetEvent("WzFileFinding", BindingFlags.Static | BindingFlags.NonPublic);
-            MethodInfo findWzHandler =
-                typeof(MapRenderInvoker).GetMethod("CharaSimLoader_WzFileFinding", BindingFlags.NonPublic | BindingFlags.Instance);
-            Delegate findWzDelegate = Delegate.CreateDelegate(findWzEvent.EventHandlerType, this, findWzHandler);
-            findWzEvent.AddMethod.Invoke(this, new[] { findWzDelegate });
         }
 
         ~MapRenderInvoker()
@@ -74,6 +58,7 @@ namespace MapRender.Invoker
         ///<inheritdoc/>
         public override void LoadMap(string imgText)
         {
+            ActivateWzContext();
             CurrentMap = int.Parse(imgText);
             imgText = imgText.EndsWith(".img") ? imgText : (imgText + ".img");
             _currentMapImage = WzTreeSearcher.SearchForMap(_wzStructure.WzNode, imgText);
@@ -90,6 +75,7 @@ namespace MapRender.Invoker
         /// <inheritdoc/>
         public override void Launch(int width, int height)
         {
+            ActivateWzContext();
             if (_currentMapImage == null)
             {
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
@@ -131,6 +117,7 @@ namespace MapRender.Invoker
 
         public override void SwitchMap(string imgText)
         {
+            ActivateWzContext();
             CurrentMap = int.Parse(imgText);
             _mapRender.SwitchToNewMap(CurrentMap);
         }
@@ -146,111 +133,11 @@ namespace MapRender.Invoker
             return _mapRender.TakeScreenShot(stream);
         }
 
-        #region COPIED_CODE
-
-        /// <summary>
-        /// !!!!!!!!!!!!COPIED CODE!!!!!!!!!!!!!!
-        /// Version: git@github.com:Kagamia/WzComparerR2.git:f6ecfb18cae661f125a189e527feea1964f5bda8
-        /// </summary>
-        /// <see cref="WzComparerR2.MainForm.CharaSimLoader_WzFileFinding"/>
-        private void CharaSimLoader_WzFileFinding(object sender, WzComparerR2.FindWzEventArgs e)
-        {
-            string[] fullPath = null;
-            if (!string.IsNullOrEmpty(e.FullPath)) //用fullpath作为输入参数
-            {
-                fullPath = e.FullPath.Split('/', '\\');
-                try
-                {
-                    e.WzType = (Wz_Type)Enum.Parse(typeof(Wz_Type), fullPath[0], true);
-                }
-                catch
-                {
-                    e.WzType = Wz_Type.Unknown;
-                }
-            }
-
-            List<Wz_Node> preSearch = new List<Wz_Node>();
-            if (e.WzType != Wz_Type.Unknown) //用wztype作为输入参数
-            {
-                IEnumerable<Wz_Structure> preSearchWz = e.WzFile?.WzStructure != null ?
-                    Enumerable.Repeat(e.WzFile.WzStructure, 1) : new List<Wz_Structure>() { _wzStructure };
-                foreach (var wzs in preSearchWz)
-                {
-                    Wz_File baseWz = null;
-                    bool find = false;
-                    foreach (Wz_File wz_f in wzs.wz_files)
-                    {
-                        if (wz_f.Type == e.WzType)
-                        {
-                            preSearch.Add(wz_f.Node);
-                            find = true;
-                            //e.WzFile = wz_f;
-                        }
-                        if (wz_f.Type == Wz_Type.Base)
-                        {
-                            baseWz = wz_f;
-                        }
-                    }
-
-                    // detect data.wz
-                    if (baseWz != null && !find)
-                    {
-                        string key = e.WzType.ToString();
-                        foreach (Wz_Node node in baseWz.Node.Nodes)
-                        {
-                            if (node.Text == key && node.Nodes.Count > 0)
-                            {
-                                preSearch.Add(node);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (fullPath == null || fullPath.Length <= 1)
-            {
-                if (e.WzType != Wz_Type.Unknown && preSearch.Count > 0) //返回wzFile
-                {
-                    e.WzNode = preSearch[0];
-                    e.WzFile = preSearch[0].Value as Wz_File;
-                }
-                return;
-            }
-
-            if (preSearch.Count <= 0)
-            {
-                return;
-            }
-
-            foreach (var wzFileNode in preSearch)
-            {
-                var searchNode = wzFileNode;
-                for (int i = 1; i < fullPath.Length && searchNode != null; i++)
-                {
-                    searchNode = searchNode.Nodes[fullPath[i]];
-                    var img = searchNode.GetValueEx<Wz_Image>(null);
-                    if (img != null)
-                    {
-                        searchNode = img.TryExtract() ? img.Node : null;
-                    }
-                }
-
-                if (searchNode != null)
-                {
-                    e.WzNode = searchNode;
-                    e.WzFile = wzFileNode.Value as Wz_File;
-                    return;
-                }
-            }
-            //寻找失败
-            e.WzNode = null;
-        }
-        #endregion
     }
 
     public abstract class MapRenderInvokerBase
     {
-
+        private readonly WzContext _wzContext;
         protected readonly Wz_Structure _wzStructure;
 
         /// <summary>
@@ -263,41 +150,13 @@ namespace MapRender.Invoker
         /// <exception cref="ArgumentException"></exception>
         protected MapRenderInvokerBase(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
         {
-            // Static settings for Wz_Structure :(
-            Wz_Structure.DefaultAutoDetectExtFiles = true;
-            Wz_Structure.DefaultEncoding = encoding;
-            Wz_Structure.DefaultImgCheckDisabled = disableImgCheck;
-            // Then our constructor
-            string baseWzPath = Path.Combine(mapleStoryPath, MapleStoryPathHelper.MapleStoryBaseWzName);
-            if (!File.Exists(baseWzPath))
-            {
-                throw new ArgumentException($"Cannot find {MapleStoryPathHelper.MapleStoryBaseWzName} in given directory {mapleStoryPath}.");
-            }
-            // See WzComparerR2.MainForm.openWz()
-            _wzStructure = new Wz_Structure();
-            if (string.Equals(Path.GetExtension(baseWzPath), ".ms", StringComparison.OrdinalIgnoreCase))
-            {
-                _wzStructure.LoadMsFile(baseWzPath);
-            }
-            else if (_wzStructure.IsKMST1125WzFormat(baseWzPath))
-            {
-                _wzStructure.LoadKMST1125DataWz(baseWzPath);
-                if (string.Equals(Path.GetFileName(baseWzPath), "Base.wz", StringComparison.OrdinalIgnoreCase))
-                {
-                    string packsDir = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(baseWzPath)), "Packs");
-                    if (Directory.Exists(packsDir))
-                    {
-                        foreach (var msFile in Directory.GetFiles(packsDir, "*.ms"))
-                        {
-                            _wzStructure.LoadMsFile(msFile);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                _wzStructure.Load(baseWzPath, true);
-            }
+            _wzContext = new WzContext(mapleStoryPath, encoding, disableImgCheck);
+            _wzStructure = _wzContext.WzStructure;
+        }
+
+        protected void ActivateWzContext()
+        {
+            _wzContext.Activate();
         }
 
         /// <summary>

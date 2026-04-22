@@ -12,7 +12,7 @@
 
 ## Behavior that matters
 - The main flow is: CLI -> `MapRenderInvoker` -> `Sampler.SampleAll(...)` -> `IDatasetWriter.Write(...)`.
-- The current capture path only records mob boxes from the renderer. Player boxes are synthetic and only appear when `--post --players <dir>` is used.
+- The current capture path only records mob boxes from the renderer. Player boxes are synthetic and only appear when the YAML `player` post-processor generates avatars from WZ part IDs.
 - `CocoWriter` and `DarknetWriter` delete their dataset root before writing. Do not point them at directories that contain anything you need to keep.
 - The runtime expects MapleStory data under `Data/Base/Base.wz`. If `--path` is omitted, the app falls back to Windows registry lookup.
 - `MapRenderInvoker` relies on reflection and copied upstream WzComparerR2 behavior. `WzComparerR2.MapRender/MapData.cs` is intentionally patched so NPCs are skipped when the generator hosts MapRender.

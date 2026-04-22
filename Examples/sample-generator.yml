@@ -14,7 +14,12 @@ sampling:
 
 postProcessors:
   - type: player
-    imageDirectory: ./pictures
+    count: 3
+    actions: [stand1, walk1, jump]
+    emotions: [default]
+    avatars:
+      - parts: [2000, 12003, 20000, 30000, 1040036, 1060026]
+      - parts: [2000, 12003, 20000, 30000, 1040036, 1060026, 1703598]
 
 maps:
   - id: 993134200

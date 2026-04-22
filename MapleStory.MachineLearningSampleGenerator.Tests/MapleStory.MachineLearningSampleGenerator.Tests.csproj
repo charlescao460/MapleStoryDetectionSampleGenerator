@@ -13,6 +13,9 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\MapleStory.Avatar\MapleStory.Avatar.csproj" />
+    <ProjectReference Include="..\MapleStory.Avatar.DebugCli\MapleStory.Avatar.DebugCli.csproj" />
     <ProjectReference Include="..\MapleStory.MachineLearningSampleGenerator\MapleStory.MachineLearningSampleGenerator.csproj" />
+    <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
   </ItemGroup>
 </Project>

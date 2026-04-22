@@ -107,8 +107,6 @@ maps:
             using TestWorkspace workspace = new TestWorkspace();
             CreateMapleStoryTree(workspace);
             workspace.CreateDirectory("output");
-            string defaultPlayers = workspace.CreateDirectory("players/default");
-            string alternatePlayers = workspace.CreateDirectory("players/alternate");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
 mapleStoryPath: ./maple
@@ -124,19 +122,31 @@ sampling:
   yStep: 6
 postProcessors:
   - type: player
-    imageDirectory: ./players/default
+    count: 2
+    actions: [stand1, jump]
+    emotions: [default, smile]
+    avatars:
+      - parts: [2000, 12003, 20000, 30000]
 maps:
   - id: 993134200
   - id: 450007010
     postProcessors:
       - type: player
-        imageDirectory: ./players/alternate
+        count: 1
+        avatars:
+          - parts: [2000, 12003, 20000, 30000, 1040036]
 ");
 
             PlayerPostProcessorConfig inherited = Assert.IsType<PlayerPostProcessorConfig>(Assert.Single(config.Maps[0].PostProcessors));
             PlayerPostProcessorConfig replaced = Assert.IsType<PlayerPostProcessorConfig>(Assert.Single(config.Maps[1].PostProcessors));
-            Assert.Equal(Path.GetFullPath(defaultPlayers), inherited.ImageDirectory);
-            Assert.Equal(Path.GetFullPath(alternatePlayers), replaced.ImageDirectory);
+            Assert.Equal(2, inherited.Count);
+            Assert.Equal(new[] { "stand1", "jump" }, inherited.Actions);
+            Assert.Equal(new[] { "default", "smile" }, inherited.Emotions);
+            Assert.Equal(new[] { 2000, 12003, 20000, 30000 }, Assert.Single(inherited.Avatars).Parts);
+            Assert.Equal(1, replaced.Count);
+            Assert.Equal(new[] { "stand1" }, replaced.Actions);
+            Assert.Equal(new[] { "default" }, replaced.Emotions);
+            Assert.Equal(new[] { 2000, 12003, 20000, 30000, 1040036 }, Assert.Single(replaced.Avatars).Parts);
         }
 
         [Fact]
@@ -145,7 +155,6 @@ maps:
             using TestWorkspace workspace = new TestWorkspace();
             CreateMapleStoryTree(workspace);
             workspace.CreateDirectory("output");
-            workspace.CreateDirectory("players/default");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
 mapleStoryPath: ./maple
@@ -161,7 +170,8 @@ sampling:
   yStep: 6
 postProcessors:
   - type: player
-    imageDirectory: ./players/default
+    avatars:
+      - parts: [2000, 12003, 20000, 30000]
 maps:
   - id: 993134200
     postProcessors: []
@@ -176,7 +186,6 @@ maps:
             using TestWorkspace workspace = new TestWorkspace();
             string configDirectory = workspace.CreateDirectory("configs");
             string outputDirectory = workspace.CreateDirectory("shared/output");
-            string playerDirectory = workspace.CreateDirectory("shared/players/default");
             CreateMapleStoryTree(workspace, "shared/maple");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
@@ -193,7 +202,8 @@ sampling:
   yStep: 6
 postProcessors:
   - type: player
-    imageDirectory: ../shared/players/default
+    avatars:
+      - parts: [2000, 12003, 20000, 30000]
 maps:
   - id: 993134200
 ", Path.Combine(configDirectory, "generator.yml"));
@@ -201,7 +211,7 @@ maps:
             Assert.Equal(Path.GetFullPath(Path.Combine(workspace.RootPath, "shared/maple")), config.MapleStoryPath);
             Assert.Equal(Path.GetFullPath(outputDirectory), config.OutputPath);
             PlayerPostProcessorConfig processor = Assert.IsType<PlayerPostProcessorConfig>(Assert.Single(config.Maps[0].PostProcessors));
-            Assert.Equal(Path.GetFullPath(playerDirectory), processor.ImageDirectory);
+            Assert.Equal(new[] { 2000, 12003, 20000, 30000 }, Assert.Single(processor.Avatars).Parts);
         }
 
         [Fact]
@@ -228,6 +238,104 @@ postProcessors:
 maps:
   - id: 993134200
 "));
+        }
+
+        [Fact]
+        public void LoadResolved_PlayerImageDirectory_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ConfigurationException exception = Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+postProcessors:
+  - type: player
+    imageDirectory: ./players
+maps:
+  - id: 993134200
+"));
+            Assert.Contains("imageDirectory is no longer supported", exception.Message);
+        }
+
+        [Theory]
+        [InlineData("missing avatars", @"
+postProcessors:
+  - type: player
+")]
+        [InlineData("empty avatars", @"
+postProcessors:
+  - type: player
+    avatars: []
+")]
+        [InlineData("empty parts", @"
+postProcessors:
+  - type: player
+    avatars:
+      - parts: []
+")]
+        [InlineData("non-integer parts", @"
+postProcessors:
+  - type: player
+    avatars:
+      - parts: [2000, abc]
+")]
+        [InlineData("invalid count", @"
+postProcessors:
+  - type: player
+    count: 0
+    avatars:
+      - parts: [2000, 12003]
+")]
+        [InlineData("empty actions", @"
+postProcessors:
+  - type: player
+    actions: []
+    avatars:
+      - parts: [2000, 12003]
+")]
+        [InlineData("empty emotions", @"
+postProcessors:
+  - type: player
+    emotions: []
+    avatars:
+      - parts: [2000, 12003]
+")]
+        public void LoadResolved_InvalidPlayerProcessor_Throws(string caseName, string postProcessorYaml)
+        {
+            _ = caseName;
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            string yaml = @"
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+" + postProcessorYaml + @"
+maps:
+  - id: 993134200
+";
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, yaml));
         }
 
         [Fact]
