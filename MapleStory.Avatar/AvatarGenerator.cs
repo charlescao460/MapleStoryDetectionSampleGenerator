@@ -452,13 +452,13 @@ namespace MapleStory.Avatar
             WzComparerR2.Avatar.AvatarCanvas canvas,
             WzComparerR2.Avatar.Bone bone)
         {
-            RemoveEffectSkins(bone);
+            RemoveNonBodyBoundingSkins(bone);
 
             BitmapOrigin bodyFrame = canvas.DrawFrame(bone);
             try
             {
                 // DrawFrame returns a null bitmap when no layers remain, which can happen for
-                // effect-only appearances after effect and afterimage skins are excluded.
+                // effect-only or weapon-only appearances after non-body skins are excluded.
                 if (bodyFrame.Bitmap == null)
                 {
                     return BodyFrameBounds.Empty;
@@ -472,20 +472,25 @@ namespace MapleStory.Avatar
             }
         }
 
-        private static void RemoveEffectSkins(WzComparerR2.Avatar.Bone bone)
+        private static void RemoveNonBodyBoundingSkins(WzComparerR2.Avatar.Bone bone)
         {
-            bone.Skins.RemoveAll(skin => IsEffectSkin(skin.Name));
+            bone.Skins.RemoveAll(skin => IsNonBodyBoundingSkin(skin.Name));
             foreach (WzComparerR2.Avatar.Bone child in bone.Children)
             {
-                RemoveEffectSkins(child);
+                RemoveNonBodyBoundingSkins(child);
             }
         }
 
-        private static bool IsEffectSkin(string skinName)
+        private static bool IsNonBodyBoundingSkin(string skinName)
         {
-            return !string.IsNullOrEmpty(skinName)
-                && (skinName.IndexOf("effect", StringComparison.OrdinalIgnoreCase) >= 0
-                    || skinName.IndexOf("afterimage", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (string.IsNullOrEmpty(skinName))
+            {
+                return false;
+            }
+
+            return skinName.StartsWith("weapon", StringComparison.OrdinalIgnoreCase)
+                || skinName.IndexOf("effect", StringComparison.OrdinalIgnoreCase) >= 0
+                || skinName.IndexOf("afterimage", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static void ApplyPose(WzComparerR2.Avatar.AvatarCanvas canvas, AvatarPose pose)
