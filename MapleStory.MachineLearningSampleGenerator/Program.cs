@@ -94,9 +94,11 @@ namespace MapleStory.MachineLearningSampleGenerator
         /// </summary>
         private static int Run(ResolvedRunConfig config)
         {
-            MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
             using AvatarGenerator avatarGenerator = new AvatarGenerator(config.MapleStoryPath, config.TextEncoding, false);
             AvatarPlayerFrameSource playerFrameSource = new AvatarPlayerFrameSource(avatarGenerator);
+            PlayerPostProcessorValidator.Validate(config.Maps, playerFrameSource);
+
+            MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
             Queue<ResolvedMapConfig> maps = new Queue<ResolvedMapConfig>(config.Maps);
             ResolvedMapConfig firstMap = maps.Dequeue();
             renderInvoker.LoadMap(firstMap.Id);

@@ -13,6 +13,11 @@ namespace MapleStory.MachineLearningSampleGenerator
             _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         }
 
+        public void ValidateAvatar(PlayerAvatar avatar)
+        {
+            _generator.ValidateAppearance(new AvatarAppearance(avatar.PartIds));
+        }
+
         public int GetBodyFrameCount(PlayerAvatar avatar, string action)
         {
             return _generator.GetBodyFrameCount(new AvatarAppearance(avatar.PartIds), action);

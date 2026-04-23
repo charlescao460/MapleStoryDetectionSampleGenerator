@@ -40,6 +40,16 @@ namespace MapleStory.Avatar
             return canvas.Emotions.ToArray();
         }
 
+        public void ValidateAppearance(AvatarAppearance appearance)
+        {
+            if (appearance == null)
+            {
+                throw new ArgumentNullException(nameof(appearance));
+            }
+
+            CreateCanvas(appearance);
+        }
+
         public int GetBodyFrameCount(AvatarAppearance appearance, string action)
         {
             if (appearance == null)

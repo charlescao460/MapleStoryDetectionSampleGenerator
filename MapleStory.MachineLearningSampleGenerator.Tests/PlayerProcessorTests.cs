@@ -114,6 +114,10 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
                 _frame = frame;
             }
 
+            public void ValidateAvatar(PlayerAvatar avatar)
+            {
+            }
+
             public int GetBodyFrameCount(PlayerAvatar avatar, string action)
             {
                 return 1;
