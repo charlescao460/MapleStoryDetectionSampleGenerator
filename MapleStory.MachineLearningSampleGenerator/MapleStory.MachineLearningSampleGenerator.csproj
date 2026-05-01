@@ -10,7 +10,11 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\MapleStory.Avatar\MapleStory.Avatar.csproj" />
+        <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj" />
         <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
+        <ProjectReference Include="..\WzComparerR2\WzComparerR2.Common\WzComparerR2.Common.csproj" />
+        <ProjectReference Include="..\WzComparerR2\WzComparerR2.PluginBase\WzComparerR2.PluginBase.csproj" />
+        <ProjectReference Include="..\WzComparerR2\WzComparerR2.WzLib\WzComparerR2.WzLib.csproj" />
     </ItemGroup>
     <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
         <Content Include="..\WzComparerR2\References\x86\*.dll">

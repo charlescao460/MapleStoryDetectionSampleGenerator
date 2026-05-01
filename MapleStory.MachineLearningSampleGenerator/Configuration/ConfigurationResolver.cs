@@ -19,9 +19,11 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 
             string fullConfigPath = Path.GetFullPath(configPath ?? string.Empty);
             string configDirectory = Path.GetDirectoryName(fullConfigPath) ?? Directory.GetCurrentDirectory();
+            GenerationMode generationMode = ResolveGenerationMode(config.Mode);
             string mapleStoryPath = ResolveMapleStoryPath(config.MapleStoryPath, configDirectory);
             Encoding textEncoding = ResolveEncoding(config.Encoding);
             OutputFormat outputFormat = ResolveOutputFormat(config.Output?.Format);
+            ValidateModeOutput(generationMode, outputFormat);
             string outputPath = ResolveExistingDirectory(config.Output?.Path, configDirectory, "output.path");
             string outputName = RequireNonEmpty(config.Output?.Name, "output.name");
             int renderWidth = config.Render?.Width ?? 0;
@@ -58,16 +60,72 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 maps.Add(new ResolvedMapConfig(id, sampling.XStep, sampling.YStep, sampling.IntervalMs, postProcessors));
             }
 
+            ValidateModePostProcessors(generationMode, config, maps);
+
             return new ResolvedRunConfig(
                 fullConfigPath,
                 mapleStoryPath,
                 textEncoding,
+                generationMode,
                 outputFormat,
                 outputPath,
                 outputName,
                 renderWidth,
                 renderHeight,
                 maps.AsReadOnly());
+        }
+
+        private static GenerationMode ResolveGenerationMode(string rawMode)
+        {
+            if (!Enum.TryParse(rawMode, true, out GenerationMode generationMode))
+            {
+                throw new ConfigurationException($"Unsupported mode '{rawMode}'. Use 'character' or 'rune'.");
+            }
+
+            return generationMode;
+        }
+
+        private static void ValidateModeOutput(GenerationMode generationMode, OutputFormat outputFormat)
+        {
+            if (generationMode == GenerationMode.Rune && outputFormat != OutputFormat.Coco)
+            {
+                throw new ConfigurationException("mode 'rune' only supports output.format 'coco'.");
+            }
+        }
+
+        private static void ValidateModePostProcessors(
+            GenerationMode generationMode,
+            GeneratorConfig config,
+            IReadOnlyList<ResolvedMapConfig> maps)
+        {
+            if (generationMode != GenerationMode.Rune)
+            {
+                return;
+            }
+
+            if (config.PostProcessors != null && config.PostProcessors.Count > 0)
+            {
+                throw new ConfigurationException("mode 'rune' does not support postProcessors.");
+            }
+
+            if (config.Maps != null)
+            {
+                for (int i = 0; i < config.Maps.Count; i++)
+                {
+                    if (config.Maps[i]?.PostProcessors != null && config.Maps[i].PostProcessors.Count > 0)
+                    {
+                        throw new ConfigurationException($"mode 'rune' does not support maps[{i}].postProcessors.");
+                    }
+                }
+            }
+
+            for (int i = 0; i < maps.Count; i++)
+            {
+                if (maps[i].PostProcessors.Count > 0)
+                {
+                    throw new ConfigurationException($"mode 'rune' does not support maps[{i}].postProcessors.");
+                }
+            }
         }
 
         private static string ResolveMapleStoryPath(string configuredPath, string configDirectory)

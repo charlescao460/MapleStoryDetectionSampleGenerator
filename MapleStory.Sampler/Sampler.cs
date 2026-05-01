@@ -47,7 +47,7 @@ namespace MapleStory.Sampler
                         postProcessor.Process(ret);
                     }
                 }
-                ret.ImageStream = EncodeScreenShot(ret.ImageStream);
+                ret.ImageStream = EncodeScreenShot(ret.ImageStream, ret.Width, ret.Height);
                 return ret;
             });
         }
@@ -120,10 +120,10 @@ namespace MapleStory.Sampler
             return;
         }
 
-        private MemoryStream EncodeScreenShot(Stream screenShotStream)
+        private MemoryStream EncodeScreenShot(Stream screenShotStream, int width, int height)
         {
             using Bitmap source = new Bitmap(screenShotStream);
-            using Bitmap result = new Bitmap(_renderInvoker.ScreenWidth, _renderInvoker.ScreenHeight);
+            using Bitmap result = new Bitmap(width, height);
             Rectangle rectangle = new Rectangle(Point.Empty, source.Size);
             using (Graphics graphics = Graphics.FromImage(result))
             {

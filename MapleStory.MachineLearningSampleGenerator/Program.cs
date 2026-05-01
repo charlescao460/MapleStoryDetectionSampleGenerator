@@ -9,6 +9,7 @@ using MapleStory.Avatar;
 using MapleStory.Common;
 using MapleStory.MachineLearningSampleGenerator.Configuration;
 using MapleStory.Sampler;
+using MapleStory.Sampler.PostProcessor;
 using MapRender.Invoker;
 
 namespace MapleStory.MachineLearningSampleGenerator
@@ -94,10 +95,39 @@ namespace MapleStory.MachineLearningSampleGenerator
         /// </summary>
         private static int Run(ResolvedRunConfig config)
         {
+            switch (config.GenerationMode)
+            {
+                case GenerationMode.Character:
+                    return RunCharacter(config);
+                case GenerationMode.Rune:
+                    return RunRune(config);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(config), config.GenerationMode, null);
+            }
+        }
+
+        private static int RunCharacter(ResolvedRunConfig config)
+        {
             using AvatarGenerator avatarGenerator = new AvatarGenerator(config.MapleStoryPath, config.TextEncoding, false);
             AvatarPlayerFrameSource playerFrameSource = new AvatarPlayerFrameSource(avatarGenerator);
             PlayerPostProcessorValidator.Validate(config.Maps, playerFrameSource);
+            return RunSampler(
+                config,
+                map => PostProcessorFactory.Create(map.PostProcessors, playerFrameSource));
+        }
 
+        private static int RunRune(ResolvedRunConfig config)
+        {
+            using RuneAssetSet runeAssets = RuneAssetLoader.Load(config.MapleStoryPath, config.TextEncoding);
+            return RunSampler(
+                config,
+                _ => new IPostProcessor[] { new RuneProcessor(runeAssets) });
+        }
+
+        private static int RunSampler(
+            ResolvedRunConfig config,
+            Func<ResolvedMapConfig, IReadOnlyList<IPostProcessor>> createPostProcessors)
+        {
             MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
             Queue<ResolvedMapConfig> maps = new Queue<ResolvedMapConfig>(config.Maps);
             ResolvedMapConfig firstMap = maps.Dequeue();
@@ -108,8 +138,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
             while (true)
             {
-                IReadOnlyList<MapleStory.Sampler.PostProcessor.IPostProcessor> postProcessors =
-                    PostProcessorFactory.Create(firstMap.PostProcessors, playerFrameSource);
+                IReadOnlyList<IPostProcessor> postProcessors = createPostProcessors(firstMap);
                 try
                 {
                     sampler.SampleAll(firstMap.XStep, firstMap.YStep, writer, firstMap.IntervalMs, postProcessors);
@@ -132,14 +161,14 @@ namespace MapleStory.MachineLearningSampleGenerator
         }
 
         private static void DisposePostProcessors(
-            IReadOnlyList<MapleStory.Sampler.PostProcessor.IPostProcessor> postProcessors)
+            IReadOnlyList<IPostProcessor> postProcessors)
         {
             if (postProcessors == null)
             {
                 return;
             }
 
-            foreach (MapleStory.Sampler.PostProcessor.IPostProcessor postProcessor in postProcessors)
+            foreach (IPostProcessor postProcessor in postProcessors)
             {
                 if (postProcessor is IDisposable disposable)
                 {

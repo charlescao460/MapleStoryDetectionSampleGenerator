@@ -15,6 +15,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             workspace.CreateDirectory("output");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -31,10 +32,174 @@ maps:
 ");
 
             Assert.Equal(OutputFormat.Coco, config.OutputFormat);
+            Assert.Equal(GenerationMode.Character, config.GenerationMode);
             Assert.Equal("dataset", config.OutputName);
             Assert.Single(config.Maps);
             Assert.Equal("993134200", config.Maps[0].Id);
             Assert.Empty(config.Maps[0].PostProcessors);
+        }
+
+        [Fact]
+        public void LoadResolved_MissingMode_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_InvalidMode_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: mystery
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_RuneModeWithCoco_Succeeds()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+");
+
+            Assert.Equal(GenerationMode.Rune, config.GenerationMode);
+            Assert.Equal(OutputFormat.Coco, config.OutputFormat);
+            Assert.Empty(config.Maps[0].PostProcessors);
+        }
+
+        [Theory]
+        [InlineData("darknet")]
+        [InlineData("tfRecord")]
+        public void LoadResolved_RuneModeWithNonCocoOutput_Throws(string format)
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, $@"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: {format}
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_RuneModeWithPostProcessors_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+postProcessors:
+  - type: player
+    avatars:
+      - parts: [2000, 12003]
+maps:
+  - id: 993134200
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_RuneModeWithMapPostProcessors_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+    postProcessors:
+      - type: player
+        avatars:
+          - parts: [2000, 12003]
+"));
         }
 
         [Fact]
@@ -45,6 +210,7 @@ maps:
             workspace.CreateDirectory("output");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -78,6 +244,7 @@ maps:
             workspace.CreateDirectory("output");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -109,6 +276,7 @@ maps:
             workspace.CreateDirectory("output");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -157,6 +325,7 @@ maps:
             workspace.CreateDirectory("output");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -189,6 +358,7 @@ maps:
             CreateMapleStoryTree(workspace, "shared/maple");
 
             ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ../shared/maple
 output:
   format: coco
@@ -222,6 +392,7 @@ maps:
             workspace.CreateDirectory("output");
 
             Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -248,6 +419,7 @@ maps:
             workspace.CreateDirectory("output");
 
             ConfigurationException exception = Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -319,6 +491,7 @@ postProcessors:
             workspace.CreateDirectory("output");
 
             string yaml = @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -346,6 +519,7 @@ maps:
             workspace.CreateDirectory("output");
 
             Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 unexpected: true
 output:
@@ -371,6 +545,7 @@ maps:
             workspace.CreateDirectory("output");
 
             Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: madeup
@@ -394,6 +569,7 @@ maps:
             CreateMapleStoryTree(workspace);
 
             Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
 mapleStoryPath: ./maple
 output:
   format: coco
@@ -433,3 +609,5 @@ maps:
         }
     }
 }
+
+

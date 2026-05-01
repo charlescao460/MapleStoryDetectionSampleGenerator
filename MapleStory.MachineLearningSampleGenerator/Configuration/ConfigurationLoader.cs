@@ -35,11 +35,12 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             ValidateKeys(
                 root,
                 "root",
-                new[] { "mapleStoryPath", "encoding", "output", "render", "sampling", "postProcessors", "maps" },
-                new[] { "output", "render", "sampling", "maps" });
+                new[] { "mode", "mapleStoryPath", "encoding", "output", "render", "sampling", "postProcessors", "maps" },
+                new[] { "mode", "output", "render", "sampling", "maps" });
 
             return new GeneratorConfig
             {
+                Mode = ReadRequiredString(root, "mode", "mode"),
                 MapleStoryPath = ReadOptionalString(root, "mapleStoryPath", "mapleStoryPath"),
                 Encoding = ReadOptionalString(root, "encoding", "encoding"),
                 Output = ParseOutput(root["output"], "output"),

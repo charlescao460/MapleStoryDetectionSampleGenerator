@@ -5,6 +5,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 {
     internal sealed class GeneratorConfig
     {
+        public string Mode { get; set; } = string.Empty;
+
         public string MapleStoryPath { get; set; } = string.Empty;
 
         public string Encoding { get; set; } = string.Empty;
@@ -90,6 +92,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             string configPath,
             string mapleStoryPath,
             Encoding textEncoding,
+            GenerationMode generationMode,
             OutputFormat outputFormat,
             string outputPath,
             string outputName,
@@ -100,6 +103,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             ConfigPath = configPath;
             MapleStoryPath = mapleStoryPath;
             TextEncoding = textEncoding;
+            GenerationMode = generationMode;
             OutputFormat = outputFormat;
             OutputPath = outputPath;
             OutputName = outputName;
@@ -113,6 +117,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public string MapleStoryPath { get; }
 
         public Encoding TextEncoding { get; }
+
+        public GenerationMode GenerationMode { get; }
 
         public OutputFormat OutputFormat { get; }
 

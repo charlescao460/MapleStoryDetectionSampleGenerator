@@ -30,6 +30,8 @@ You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage h
 
 Example YAML:
 ```yaml
+mode: character
+
 output:
   format: coco
   path: .
@@ -62,6 +64,7 @@ maps:
 ```
 
 Notes about the YAML format:
+* `mode` is required. Use `character` for normal map/object samples and `rune` for rune-arrow keypoint samples.
 * `maps` is required and each `id` should be the numeric map id without `.img`.
 * Root `sampling` and `postProcessors` act as defaults for every map.
 * A map-level `sampling` block overrides only the fields it sets.
@@ -69,6 +72,8 @@ Notes about the YAML format:
 * `player.count` is the number of generated player instances added to each sampled screenshot. It defaults to `3` when omitted.
 * `player.avatars[].parts` is an ordered list of WZ part IDs. Later IDs replace earlier slot conflicts, matching the avatar generator behavior.
 * Relative paths are resolved from the YAML file location.
+
+Rune mode uses the same `maps`, `render`, and `sampling` sections, but requires `output.format: coco` and does not support `postProcessors`. Each output image is a center-square crop with four generated `rune_arrow` annotations and two COCO keypoints per arrow.
 
 # Note
 * Since NPCs look like players, including them without annotation could result a negative effect on our model. Therefore, by default, we changed [WzComparerR2.MapRender/MapData.cs](https://github.com/Kagamia/WzComparerR2/blob/main/WzComparerR2.MapRender/MapData.cs) to prevent any NPC data loaded into map render when invoking from `MapleStory.MachineLearningSampleGenerator.exe`,
