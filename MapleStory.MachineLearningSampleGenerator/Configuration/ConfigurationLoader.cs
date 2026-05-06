@@ -35,7 +35,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             ValidateKeys(
                 root,
                 "root",
-                new[] { "mode", "mapleStoryPath", "encoding", "output", "render", "sampling", "postProcessors", "maps" },
+                new[] { "mode", "mapleStoryPath", "encoding", "output", "render", "sampling", "concurrency", "postProcessors", "maps" },
                 new[] { "mode", "output", "render", "sampling", "maps" });
 
             return new GeneratorConfig
@@ -46,6 +46,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 Output = ParseOutput(root["output"], "output"),
                 Render = ParseRender(root["render"], "render"),
                 Sampling = ParseSampling(root["sampling"], "sampling"),
+                Concurrency = ReadOptionalInt(root, "concurrency", "concurrency"),
                 PostProcessors = root.TryGetValue("postProcessors", out YamlNode processorsNode)
                     ? ParsePostProcessors(processorsNode, "postProcessors")
                     : new List<PostProcessorConfig>(),

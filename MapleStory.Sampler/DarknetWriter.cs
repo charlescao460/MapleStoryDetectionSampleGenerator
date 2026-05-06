@@ -19,6 +19,7 @@ namespace MapleStory.Sampler
         private const string TestingDataFile = "test.txt";
         private const string ObjDirectory = "obj";
 
+        private readonly object _sync = new object();
         private readonly List<ObjectClass> _occurrenceClasses;
         private bool _isFinished;
         private bool _disposed;
@@ -57,38 +58,44 @@ namespace MapleStory.Sampler
 
         public void Write(Sample sample)
         {
-            // Write training list
-            string dataLine = $"{DefaultRootDirectory}/{ObjDirectory}/{sample.Guid + ".jpg"}";
-            StreamWriter destination = _random.NextDouble() < DefaultTestingPortion
-                ? _testingDataListWriter
-                : _trainingDataListWriter;
-            destination.WriteLine(dataLine);
-            destination.Flush();
+            lock (_sync)
+            {
+                // Write training list
+                string dataLine = $"{DefaultRootDirectory}/{ObjDirectory}/{sample.Guid + ".jpg"}";
+                StreamWriter destination = _random.NextDouble() < DefaultTestingPortion
+                    ? _testingDataListWriter
+                    : _trainingDataListWriter;
+                destination.WriteLine(dataLine);
+                destination.Flush();
 
-            // Write images
-            using (FileStream imageStream =
-                new FileStream(Path.Combine(ObjPath, sample.Guid + ".jpg"), FileMode.CreateNew))
-            {
-                sample.ImageStream.WriteTo(imageStream);
-            }
-            // Write labels
-            using (FileStream lableStream =
-                new FileStream(Path.Combine(ObjPath, sample.Guid + ".txt"), FileMode.CreateNew))
-            {
-                using (StreamWriter lableStreamWriter = new StreamWriter(lableStream))
+                // Write images
+                using (FileStream imageStream =
+                    new FileStream(Path.Combine(ObjPath, sample.Guid + ".jpg"), FileMode.CreateNew))
                 {
-                    WriteItems(sample, lableStreamWriter);
+                    sample.ImageStream.WriteTo(imageStream);
+                }
+                // Write labels
+                using (FileStream lableStream =
+                    new FileStream(Path.Combine(ObjPath, sample.Guid + ".txt"), FileMode.CreateNew))
+                {
+                    using (StreamWriter lableStreamWriter = new StreamWriter(lableStream))
+                    {
+                        WriteItems(sample, lableStreamWriter);
+                    }
                 }
             }
         }
 
         public void Finish()
         {
-            WriteObjData();
-            WriteClassNames();
-            _trainingDataListWriter.Flush();
-            _testingDataListWriter.Flush();
-            _isFinished = true;
+            lock (_sync)
+            {
+                WriteObjData();
+                WriteClassNames();
+                _trainingDataListWriter.Flush();
+                _testingDataListWriter.Flush();
+                _isFinished = true;
+            }
         }
 
         /// <summary>
@@ -178,13 +185,16 @@ namespace MapleStory.Sampler
 
         public void Dispose()
         {
-            if (!_isFinished)
+            lock (_sync)
             {
-                Finish();
+                if (!_isFinished)
+                {
+                    Finish();
+                }
+                _trainingDataListWriter.Dispose();
+                _testingDataListWriter.Dispose();
+                _disposed = true;
             }
-            _trainingDataListWriter.Dispose();
-            _testingDataListWriter.Dispose();
-            _disposed = true;
         }
 
         ~DarknetWriter()

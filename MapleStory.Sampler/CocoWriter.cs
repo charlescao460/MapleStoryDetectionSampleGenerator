@@ -29,6 +29,7 @@ namespace MapleStory.Sampler
         private readonly Random _random;
         private readonly Dictionary<ObjectClass, int> _categoryIds;
         private readonly string _datasetName;
+        private readonly object _sync = new object();
         private readonly List<CocoImage> _trainingImages;
         private readonly List<CocoImage> _validationImages;
         private readonly List<CocoCategory> _categories;
@@ -70,64 +71,70 @@ namespace MapleStory.Sampler
 
         public void Write(Sample sample)
         {
-            double rand = _random.NextDouble();
-            List<CocoAnnotation> annotationsToAdd;
-            List<CocoImage> imagesToAdd;
-            string pathToWrite;
-            if (rand < DefaultTestingPortion)
+            lock (_sync)
             {
-                annotationsToAdd = _validationAnnotations;
-                imagesToAdd = _validationImages;
-                pathToWrite = _validationImagesPath;
-            }
-            else
-            {
-                annotationsToAdd = _trainingAnnotations;
-                imagesToAdd = _trainingImages;
-                pathToWrite = _trainingImagesPath;
-            }
-            // Write image
-            string jpgFileName = sample.Guid + ".jpg";
-            using FileStream imageStream = new FileStream(Path.Combine(pathToWrite, jpgFileName), FileMode.CreateNew);
-            sample.ImageStream.WriteTo(imageStream);
-            imageStream.Flush();
-            CocoImage cocoImage = new CocoImage(jpgFileName, sample.Width, sample.Height, _nextImageId++);
-            imagesToAdd.Add(cocoImage);
+                double rand = _random.NextDouble();
+                List<CocoAnnotation> annotationsToAdd;
+                List<CocoImage> imagesToAdd;
+                string pathToWrite;
+                if (rand < DefaultTestingPortion)
+                {
+                    annotationsToAdd = _validationAnnotations;
+                    imagesToAdd = _validationImages;
+                    pathToWrite = _validationImagesPath;
+                }
+                else
+                {
+                    annotationsToAdd = _trainingAnnotations;
+                    imagesToAdd = _trainingImages;
+                    pathToWrite = _trainingImagesPath;
+                }
+                // Write image
+                string jpgFileName = sample.Guid + ".jpg";
+                using FileStream imageStream = new FileStream(Path.Combine(pathToWrite, jpgFileName), FileMode.CreateNew);
+                sample.ImageStream.WriteTo(imageStream);
+                imageStream.Flush();
+                CocoImage cocoImage = new CocoImage(jpgFileName, sample.Width, sample.Height, _nextImageId++);
+                imagesToAdd.Add(cocoImage);
 
-            // Write annotations
-            GetAnnotationFromSample(sample, cocoImage.Id, ref annotationsToAdd);
+                // Write annotations
+                GetAnnotationFromSample(sample, cocoImage.Id, ref annotationsToAdd);
+            }
         }
 
         public void Finish()
         {
-            CocoLicense license = new CocoLicense();
-            // Write training set
-            CocoJson trainingJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
-                license,
-                _trainingImages,
-                _categories,
-                _trainingAnnotations);
-            using FileStream trainingStream =
-                new FileStream(Path.Combine(AnnotationsPath, TrainingJson), FileMode.CreateNew);
-            using Utf8JsonWriter trainingWriter = new Utf8JsonWriter(trainingStream);
-            JsonSerializer.Serialize(trainingWriter, trainingJson);
+            lock (_sync)
+            {
+                CocoLicense license = new CocoLicense();
+                // Write training set
+                CocoJson trainingJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
+                    license,
+                    _trainingImages,
+                    _categories,
+                    _trainingAnnotations);
+                using FileStream trainingStream =
+                    new FileStream(Path.Combine(AnnotationsPath, TrainingJson), FileMode.CreateNew);
+                using Utf8JsonWriter trainingWriter = new Utf8JsonWriter(trainingStream);
+                JsonSerializer.Serialize(trainingWriter, trainingJson);
 
-            // Write validation set
-            CocoJson validationJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
-                license,
-                _validationImages,
-                _categories,
-                _validationAnnotations);
-            using FileStream validationStream =
-                new FileStream(Path.Combine(AnnotationsPath, ValidationJson), FileMode.CreateNew);
-            using Utf8JsonWriter validationWriter = new Utf8JsonWriter(validationStream);
-            JsonSerializer.Serialize(validationWriter, validationJson);
+                // Write validation set
+                CocoJson validationJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
+                    license,
+                    _validationImages,
+                    _categories,
+                    _validationAnnotations);
+                using FileStream validationStream =
+                    new FileStream(Path.Combine(AnnotationsPath, ValidationJson), FileMode.CreateNew);
+                using Utf8JsonWriter validationWriter = new Utf8JsonWriter(validationStream);
+                JsonSerializer.Serialize(validationWriter, validationJson);
 
-            // Flush buffer (if any)
-            trainingWriter.Flush();
-            trainingStream.Flush();
-            validationWriter.Flush();
-            validationStream.Flush();
+                // Flush buffer (if any)
+                trainingWriter.Flush();
+                trainingStream.Flush();
+                validationWriter.Flush();
+                validationStream.Flush();
+            }
         }
 
         private void GetAnnotationFromSample(Sample sample, int imageId, ref List<CocoAnnotation> dstList)

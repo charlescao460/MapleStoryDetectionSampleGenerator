@@ -34,9 +34,66 @@ maps:
             Assert.Equal(OutputFormat.Coco, config.OutputFormat);
             Assert.Equal(GenerationMode.Character, config.GenerationMode);
             Assert.Equal("dataset", config.OutputName);
+            Assert.Equal(1, config.Concurrency);
             Assert.Single(config.Maps);
             Assert.Equal("993134200", config.Maps[0].Id);
             Assert.Empty(config.Maps[0].PostProcessors);
+        }
+
+        [Fact]
+        public void LoadResolved_ConcurrencyConfigured_Succeeds()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: character
+mapleStoryPath: ./maple
+concurrency: 6
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+");
+
+            Assert.Equal(6, config.Concurrency);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void LoadResolved_InvalidConcurrency_Throws(int concurrency)
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, $@"
+mode: character
+mapleStoryPath: ./maple
+concurrency: {concurrency}
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 5
+  yStep: 6
+maps:
+  - id: 993134200
+"));
         }
 
         [Fact]

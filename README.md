@@ -31,6 +31,7 @@ You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage h
 Example YAML:
 ```yaml
 mode: character
+concurrency: 2
 
 output:
   format: coco
@@ -65,6 +66,7 @@ maps:
 
 Notes about the YAML format:
 * `mode` is required. Use `character` for normal map/object samples and `rune` for rune-arrow keypoint samples.
+* `concurrency` is optional and controls how many map renders run at once. It defaults to `1`.
 * `maps` is required and each `id` should be the numeric map id without `.img`.
 * Root `sampling` and `postProcessors` act as defaults for every map.
 * A map-level `sampling` block overrides only the fields it sets.

@@ -17,6 +17,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 
         public SamplingConfig Sampling { get; set; }
 
+        public int? Concurrency { get; set; }
+
         public IList<PostProcessorConfig> PostProcessors { get; set; } = new List<PostProcessorConfig>();
 
         public IList<MapConfig> Maps { get; set; } = new List<MapConfig>();
@@ -98,6 +100,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             string outputName,
             int renderWidth,
             int renderHeight,
+            int concurrency,
             IReadOnlyList<ResolvedMapConfig> maps)
         {
             ConfigPath = configPath;
@@ -109,6 +112,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             OutputName = outputName;
             RenderWidth = renderWidth;
             RenderHeight = renderHeight;
+            Concurrency = concurrency;
             Maps = maps;
         }
 
@@ -129,6 +133,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public int RenderWidth { get; }
 
         public int RenderHeight { get; }
+
+        public int Concurrency { get; }
 
         public IReadOnlyList<ResolvedMapConfig> Maps { get; }
     }

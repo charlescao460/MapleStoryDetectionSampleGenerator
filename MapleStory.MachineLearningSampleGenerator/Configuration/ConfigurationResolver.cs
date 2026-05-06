@@ -36,6 +36,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             {
                 throw new ConfigurationException("render.height must be greater than 0.");
             }
+            int concurrency = ResolveConcurrency(config.Concurrency);
 
             ResolvedSampling defaultSampling = ResolveRootSampling(config.Sampling);
             IReadOnlyList<PostProcessorConfig> defaultPostProcessors =
@@ -72,7 +73,19 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 outputName,
                 renderWidth,
                 renderHeight,
+                concurrency,
                 maps.AsReadOnly());
+        }
+
+        private static int ResolveConcurrency(int? concurrency)
+        {
+            int resolvedConcurrency = concurrency ?? 1;
+            if (resolvedConcurrency <= 0)
+            {
+                throw new ConfigurationException("concurrency must be greater than 0.");
+            }
+
+            return resolvedConcurrency;
         }
 
         private static GenerationMode ResolveGenerationMode(string rawMode)

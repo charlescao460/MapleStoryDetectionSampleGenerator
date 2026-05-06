@@ -4,13 +4,9 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using MapRender.Invoker;
 using MapleStory.Sampler.PostProcessor;
-using SharpDX.MediaFoundation;
 using Encoder = System.Drawing.Imaging.Encoder;
 
 namespace MapleStory.Sampler
@@ -30,26 +26,23 @@ namespace MapleStory.Sampler
             }
         }
 
-        public Task<Sample> SampleSingleAsync(IReadOnlyList<IPostProcessor> postProcessors = null)
+        public Sample SampleSingle(IReadOnlyList<IPostProcessor> postProcessors = null)
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
             var items = FilterTargetsInCamera(screenShotData);
             int width = screenShotData.CameraRectangle.Width;
             int height = screenShotData.CameraRectangle.Height;
-            return Task.Run(() =>
+            Sample ret = new Sample(stream, items, width, height);
+            if (postProcessors != null)
             {
-                Sample ret = new Sample(stream, items, width, height);
-                if (postProcessors != null)
+                foreach (var postProcessor in postProcessors)
                 {
-                    foreach (var postProcessor in postProcessors)
-                    {
-                        postProcessor.Process(ret);
-                    }
+                    postProcessor.Process(ret);
                 }
-                ret.ImageStream = EncodeScreenShot(ret.ImageStream, ret.Width, ret.Height);
-                return ret;
-            });
+            }
+            ret.ImageStream = EncodeScreenShot(ret.ImageStream, ret.Width, ret.Height);
+            return ret;
         }
 
         /// <summary>
@@ -61,7 +54,7 @@ namespace MapleStory.Sampler
         /// <param name="interval">Sampling time interval, in ms.</param>
         /// <param name="postProcessors">Optional post-processing pipeline applied in order before encoding.</param>
         public void SampleAll(int xStep, int yStep, IDatasetWriter writer, int interval = 0,
-            IReadOnlyList<IPostProcessor> postProcessors = null)
+            IReadOnlyList<IPostProcessor> postProcessors = null, string mapId = null)
         {
             xStep = Math.Abs(xStep);
             yStep = Math.Abs(yStep);
@@ -73,50 +66,40 @@ namespace MapleStory.Sampler
             int count = 0;
             int total = (int)(Math.Round((double)(endX - initX) / xStep, MidpointRounding.ToPositiveInfinity) *
                          Math.Round((double)(endY - initY) / yStep, MidpointRounding.ToPositiveInfinity));
-            HashSet<Task> writingTasks = new HashSet<Task>();
-            Queue<Task> completedTasks = new Queue<Task>();
 
             for (int x = initX; x < endX; x += xStep)
             {
                 for (int y = initY; y < endY; y += yStep)
                 {
-                    Console.WriteLine($"Sampling at center x={x},y={y}....");
-                    // Move Camera
-                    _renderInvoker.MoveCamera(x, y);
-                    // Do sample
-                    writingTasks.Add(SampleSingleAsync(postProcessors).ContinueWith(s =>
+                    try
                     {
-                        lock (writer)
-                        {
-                            writer.Write(s.Result);
-                        }
-                    }));
-                    // Check pending tasks
-                    foreach (var task in writingTasks)
+                        Console.WriteLine($"Sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at center x={x},y={y}....");
+                        // Move Camera
+                        _renderInvoker.MoveCamera(x, y);
+                        // Do sample
+                        Sample sample = SampleSingle(postProcessors);
+                        writer.Write(sample);
+                    }
+                    catch (Exception ex)
                     {
-                        if (task.Exception != null)
+                        Console.Error.WriteLine(
+                            $"Error sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at center x={x},y={y}: {ex}");
+                        if (!_renderInvoker.IsRunning)
                         {
-                            throw task.Exception;
-                        }
-                        if (task.IsCompleted)
-                        {
-                            count++;
-                            completedTasks.Enqueue(task);
-                            Console.WriteLine($"Progress: {count}/{total}, {(double)count / total * 100}%\n");
+                            Console.Error.WriteLine(
+                                $"Stopping map {mapId ?? _renderInvoker.CurrentMap.ToString()} because its render thread is no longer running.");
+                            return;
                         }
                     }
-                    foreach (var task in completedTasks)
+                    finally
                     {
-                        writingTasks.Remove(task);
+                        count++;
+                        Console.WriteLine($"Progress: {count}/{total}, {(double)count / total * 100}%\n");
+                        Thread.Sleep(interval);
                     }
-                    Thread.Sleep(interval);
                 }
             }
-            foreach (var task in writingTasks)
-            {
-                task.GetAwaiter().GetResult();
-            }
-            Console.WriteLine("############## All Samples Captured ##############");
+            Console.WriteLine($"############## All Samples Captured for map {mapId ?? _renderInvoker.CurrentMap.ToString()} ##############");
             return;
         }
 
@@ -160,9 +143,13 @@ namespace MapleStory.Sampler
                 {
                     throw new InvalidDataException("Items Height or Width is negative!!");
                 }
+                if (i.Height == 0 || i.Width == 0)
+                {
+                    return;
+                }
 
                 // Not show in screenshots at all
-                if (i.X > imgWidth || i.Y > imgHeight)
+                if (i.X >= imgWidth || i.Y >= imgHeight)
                 {
                     return;
                 }
@@ -204,7 +191,12 @@ namespace MapleStory.Sampler
                     inCameraHeight = imgHeight - i.Y;
                 }
 
-                double inCameraArea = inCameraHeight * imgWidth;
+                if (inCameraWidth <= 0 || inCameraHeight <= 0)
+                {
+                    return;
+                }
+
+                double inCameraArea = inCameraHeight * inCameraWidth;
                 if (inCameraArea / itemArea >= ITEM_PARTIAL_AREA_THRESHOLD)
                 {
                     i.Width = inCameraWidth;

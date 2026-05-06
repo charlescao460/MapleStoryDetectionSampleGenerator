@@ -5,7 +5,6 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using MapleStory.Common;
 using Microsoft.Xna.Framework;
 using WzComparerR2.Common;
@@ -17,12 +16,17 @@ namespace MapRender.Invoker
 {
     public class MapRenderInvoker : MapRenderInvokerBase
     {
+        private static readonly object RenderInitializationSyncRoot = new object();
+        private static readonly TimeSpan SceneLoadingTimeout = TimeSpan.FromSeconds(60);
+        private readonly object _lifetimeSync = new object();
         private Wz_Image _currentMapImage;
         private StringLinker _stringLinker;
         private Thread _renderThread;
         private MapRender _mapRender;
         private Camera _camera;
+        private Exception _renderThreadException;
         private volatile bool _isRunning;
+        private bool _disposed;
 
         public bool IsRunning => _isRunning;
 
@@ -52,13 +56,14 @@ namespace MapRender.Invoker
 
         ~MapRenderInvoker()
         {
-            _renderThread?.Abort();
+            Dispose(false);
         }
 
         ///<inheritdoc/>
         public override void LoadMap(string imgText)
         {
             ActivateWzContext();
+            ThrowIfDisposed();
             CurrentMap = int.Parse(imgText);
             imgText = imgText.EndsWith(".img") ? imgText : (imgText + ".img");
             _currentMapImage = WzTreeSearcher.SearchForMap(_wzStructure.WzNode, imgText);
@@ -76,68 +81,179 @@ namespace MapRender.Invoker
         public override void Launch(int width, int height)
         {
             ActivateWzContext();
+            ThrowIfDisposed();
             if (_currentMapImage == null)
             {
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
             }
 
             _isRunning = false;
+            _renderThreadException = null;
+            ManualResetEventSlim initialized = new ManualResetEventSlim(false);
             _renderThread = new Thread(() =>
             {
-                _mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
-                _mapRender.Window.Title = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileName;
                 try
                 {
-                    using (_mapRender)
+                    ActivateWzContext();
+                    MapRender mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
+                    mapRender.Window.Title = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileName;
+                    lock (_lifetimeSync)
                     {
-                        _mapRender.RunOneFrame(); // Initialize
-                        _mapRender.ChangeResolution(width, height);
-                        _camera = _mapRender.renderEnv.Camera;
-                        _mapRender.Run();
+                        _mapRender = mapRender;
                     }
+                    using (mapRender)
+                    {
+                        mapRender.RunOneFrame(); // Initialize
+                        mapRender.ChangeResolution(width, height);
+                        initialized.Set();
+                        mapRender.Run();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _renderThreadException = ex;
+                    initialized.Set();
                 }
                 finally
                 {
-                    _mapRender = null;
+                    lock (_lifetimeSync)
+                    {
+                        _mapRender = null;
+                        _camera = null;
+                    }
+                    _isRunning = false;
                 }
             });
             ScreenHeight = height;
             ScreenWidth = width;
             _renderThread.SetApartmentState(ApartmentState.STA);
             _renderThread.IsBackground = true;
-            _renderThread.Start();
-            SpinWait spinWait = new SpinWait();
-            while (_mapRender == null)
+            lock (RenderInitializationSyncRoot)
             {
-                spinWait.SpinOnce();
+                _renderThread.Start();
+                initialized.Wait();
+                initialized.Dispose();
+                if (_renderThreadException != null)
+                {
+                    throw new InvalidOperationException("MapRender launch failed.", _renderThreadException);
+                }
+                MapRender mapRender;
+                lock (_lifetimeSync)
+                {
+                    mapRender = _mapRender;
+                }
+                if (mapRender == null)
+                {
+                    throw new InvalidOperationException("MapRender launch failed before initialization completed.");
+                }
+                mapRender.WaitSceneLoading(SceneLoadingTimeout);
+                _camera = mapRender.renderEnv.Camera;
+                _isRunning = true;
             }
-            _mapRender.WaitSceneLoading();
-            _isRunning = true;
         }
 
         public override void SwitchMap(string imgText)
         {
             ActivateWzContext();
+            ThrowIfDisposed();
             CurrentMap = int.Parse(imgText);
             _mapRender.SwitchToNewMap(CurrentMap);
         }
 
         public void MoveCamera(int centerX, int centerY)
         {
+            ThrowIfDisposed();
+            ThrowIfRenderThreadFailed();
             _camera.Center = new Vector2(centerX, centerY);
             _camera.AdjustToWorldRect();
         }
 
         public ScreenShotData TakeScreenShot(Stream stream)
         {
-            return _mapRender.TakeScreenShot(stream);
+            ThrowIfDisposed();
+            ThrowIfRenderThreadFailed();
+            MapRender mapRender;
+            lock (_lifetimeSync)
+            {
+                mapRender = _mapRender;
+            }
+            if (mapRender == null)
+            {
+                throw new InvalidOperationException("MapRender is not available.");
+            }
+            ScreenShotData screenShotData = mapRender.TakeScreenShot(stream);
+            ThrowIfRenderThreadFailed();
+            return screenShotData;
+        }
+
+        public override void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            MapRender mapRender;
+            Thread renderThread;
+            lock (_lifetimeSync)
+            {
+                mapRender = _mapRender;
+                renderThread = _renderThread;
+            }
+
+            try
+            {
+                lock (RenderInitializationSyncRoot)
+                {
+                    mapRender?.Exit();
+                    if (disposing && renderThread != null && renderThread.IsAlive)
+                    {
+                        renderThread.Join(TimeSpan.FromSeconds(10));
+                    }
+                }
+            }
+            finally
+            {
+                if (disposing)
+                {
+                    base.Dispose(disposing);
+                }
+                _disposed = true;
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(MapRenderInvoker));
+            }
+        }
+
+        private void ThrowIfRenderThreadFailed()
+        {
+            if (_renderThreadException != null)
+            {
+                throw new InvalidOperationException("MapRender render thread failed.", _renderThreadException);
+            }
+            if (!_isRunning)
+            {
+                throw new InvalidOperationException("MapRender is not running.");
+            }
         }
 
     }
 
-    public abstract class MapRenderInvokerBase
+    public abstract class MapRenderInvokerBase : IDisposable
     {
         private readonly WzContext _wzContext;
+        private bool _disposed;
         protected readonly Wz_Structure _wzStructure;
 
         /// <summary>
@@ -157,6 +273,26 @@ namespace MapRender.Invoker
         protected void ActivateWzContext()
         {
             _wzContext.Activate();
+        }
+
+        public virtual void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (disposing)
+            {
+                _wzContext.Dispose();
+            }
+            _disposed = true;
         }
 
         /// <summary>

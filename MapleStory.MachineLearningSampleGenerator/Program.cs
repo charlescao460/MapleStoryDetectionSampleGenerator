@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -16,6 +18,8 @@ namespace MapleStory.MachineLearningSampleGenerator
 {
     internal static class Program
     {
+        private static readonly object MapSetupSyncRoot = new object();
+
         [DllImport("kernel32.dll")]
         static extern bool SetDllDirectory(string path);
 
@@ -113,7 +117,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             PlayerPostProcessorValidator.Validate(config.Maps, playerFrameSource);
             return RunSampler(
                 config,
-                map => PostProcessorFactory.Create(map.PostProcessors, playerFrameSource));
+                map => CreateCharacterPostProcessorPipeline(config, map));
         }
 
         private static int RunRune(ResolvedRunConfig config)
@@ -121,59 +125,135 @@ namespace MapleStory.MachineLearningSampleGenerator
             using RuneAssetSet runeAssets = RuneAssetLoader.Load(config.MapleStoryPath, config.TextEncoding);
             return RunSampler(
                 config,
-                _ => new IPostProcessor[] { new RuneProcessor(runeAssets) });
+                _ => CreateRunePostProcessorPipeline(runeAssets));
         }
 
         private static int RunSampler(
             ResolvedRunConfig config,
-            Func<ResolvedMapConfig, IReadOnlyList<IPostProcessor>> createPostProcessors)
+            Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
         {
-            MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
-            Queue<ResolvedMapConfig> maps = new Queue<ResolvedMapConfig>(config.Maps);
-            ResolvedMapConfig firstMap = maps.Dequeue();
-            renderInvoker.LoadMap(firstMap.Id);
-            renderInvoker.Launch(config.RenderWidth, config.RenderHeight);
-
+            ValidateMaps(config);
             IDatasetWriter writer = GetDatasetWriter(config);
-            Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-            while (true)
+            try
             {
-                IReadOnlyList<IPostProcessor> postProcessors = createPostProcessors(firstMap);
-                try
-                {
-                    sampler.SampleAll(firstMap.XStep, firstMap.YStep, writer, firstMap.IntervalMs, postProcessors);
-                }
-                finally
-                {
-                    DisposePostProcessors(postProcessors);
-                }
-
-                if (maps.Count == 0)
-                {
-                    break;
-                }
-
-                firstMap = maps.Dequeue();
-                renderInvoker.SwitchMap(firstMap.Id);
+                Console.WriteLine("Concurrency: {0}", config.Concurrency);
+                ConcurrentMapRunner.Run(
+                    config.Maps,
+                    config.Concurrency,
+                    map => SampleMap(config, map, writer, createPostProcessors),
+                    (map, ex) => Console.Error.WriteLine($"Error sampling map {map.Id}: {ex}"));
+                writer.Finish();
             }
-            writer.Finish();
-            return 0;
-        }
-
-        private static void DisposePostProcessors(
-            IReadOnlyList<IPostProcessor> postProcessors)
-        {
-            if (postProcessors == null)
+            finally
             {
-                return;
-            }
-
-            foreach (IPostProcessor postProcessor in postProcessors)
-            {
-                if (postProcessor is IDisposable disposable)
+                if (writer is IDisposable disposable)
                 {
                     disposable.Dispose();
                 }
+            }
+            return 0;
+        }
+
+        private static void ValidateMaps(ResolvedRunConfig config)
+        {
+            using MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
+            foreach (ResolvedMapConfig map in config.Maps)
+            {
+                renderInvoker.LoadMap(map.Id);
+            }
+        }
+
+        private static void SampleMap(
+            ResolvedRunConfig config,
+            ResolvedMapConfig map,
+            IDatasetWriter writer,
+            Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
+        {
+            MapRenderInvoker renderInvoker = null;
+            PostProcessorPipeline postProcessors = null;
+            try
+            {
+                lock (MapSetupSyncRoot)
+                {
+                    renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
+                    renderInvoker.LoadMap(map.Id);
+                    renderInvoker.Launch(config.RenderWidth, config.RenderHeight);
+                }
+                postProcessors = createPostProcessors(map);
+                Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
+                sampler.SampleAll(map.XStep, map.YStep, writer, map.IntervalMs, postProcessors.Processors, map.Id);
+            }
+            finally
+            {
+                postProcessors?.Dispose();
+                renderInvoker?.Dispose();
+            }
+        }
+
+        private static PostProcessorPipeline CreateCharacterPostProcessorPipeline(
+            ResolvedRunConfig config,
+            ResolvedMapConfig map)
+        {
+            if (map.PostProcessors.Count == 0)
+            {
+                return PostProcessorPipeline.Empty;
+            }
+
+            AvatarGenerator avatarGenerator = new AvatarGenerator(config.MapleStoryPath, config.TextEncoding, false);
+            AvatarPlayerFrameSource playerFrameSource = new AvatarPlayerFrameSource(avatarGenerator);
+            IReadOnlyList<IPostProcessor> postProcessors = PostProcessorFactory.Create(map.PostProcessors, playerFrameSource);
+            return new PostProcessorPipeline(postProcessors, avatarGenerator);
+        }
+
+        private static PostProcessorPipeline CreateRunePostProcessorPipeline(RuneAssetSet source)
+        {
+            RuneAssetSet clonedAssets = CloneRuneAssets(source);
+            return new PostProcessorPipeline(new IPostProcessor[] { new RuneProcessor(clonedAssets) }, clonedAssets);
+        }
+
+        private static RuneAssetSet CloneRuneAssets(RuneAssetSet source)
+        {
+            return new RuneAssetSet(
+                source.Arrows.Select(arrow => new RuneArrowAsset(
+                    arrow.Name,
+                    arrow.Direction,
+                    new Bitmap(arrow.Arrow),
+                    arrow.Bases.Select(bitmap => new Bitmap(bitmap)))),
+                source.Noises.Select(bitmap => new Bitmap(bitmap)));
+        }
+
+        internal sealed class PostProcessorPipeline : IDisposable
+        {
+            public static PostProcessorPipeline Empty => new PostProcessorPipeline(Array.Empty<IPostProcessor>(), null);
+
+            private readonly IDisposable _owner;
+            private bool _disposed;
+
+            public PostProcessorPipeline(IReadOnlyList<IPostProcessor> processors, IDisposable owner)
+            {
+                Processors = processors ?? Array.Empty<IPostProcessor>();
+                _owner = owner;
+            }
+
+            public IReadOnlyList<IPostProcessor> Processors { get; }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                foreach (IPostProcessor postProcessor in Processors)
+                {
+                    if (postProcessor is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                }
+
+                _owner?.Dispose();
+                _disposed = true;
             }
         }
 

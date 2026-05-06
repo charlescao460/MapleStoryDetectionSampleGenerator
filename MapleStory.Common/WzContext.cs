@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using WzComparerR2;
 using WzComparerR2.PluginBase;
 using WzComparerR2.WzLib;
@@ -14,6 +15,7 @@ namespace MapleStory.Common
     {
         private static readonly object SyncRoot = new object();
         private static readonly List<WzContext> Contexts = new List<WzContext>();
+        private static readonly AsyncLocal<WzContext> ActiveContext = new AsyncLocal<WzContext>();
         private static EventInfo _findWzEvent;
         private static Delegate _findWzDelegate;
 
@@ -39,6 +41,7 @@ namespace MapleStory.Common
 
         public void Activate()
         {
+            ActiveContext.Value = this;
             lock (SyncRoot)
             {
                 if (Contexts.Remove(this))
@@ -56,16 +59,16 @@ namespace MapleStory.Common
             }
 
             Unregister(this);
+            if (ActiveContext.Value == this)
+            {
+                ActiveContext.Value = null;
+            }
             WzStructure.Clear();
             _disposed = true;
         }
 
         private static Wz_Structure LoadWzStructure(string mapleStoryPath, Encoding encoding, bool disableImgCheck)
         {
-            Wz_Structure.DefaultAutoDetectExtFiles = true;
-            Wz_Structure.DefaultEncoding = encoding;
-            Wz_Structure.DefaultImgCheckDisabled = disableImgCheck;
-
             string baseWzPath = Path.Combine(mapleStoryPath, MapleStoryPathHelper.MapleStoryBaseWzName);
             if (!File.Exists(baseWzPath))
             {
@@ -75,6 +78,9 @@ namespace MapleStory.Common
             }
 
             Wz_Structure wzStructure = new Wz_Structure();
+            wzStructure.AutoDetectExtFiles = true;
+            wzStructure.TextEncoding = encoding;
+            wzStructure.ImgCheckDisabled = disableImgCheck;
             if (string.Equals(Path.GetExtension(baseWzPath), ".ms", StringComparison.OrdinalIgnoreCase))
             {
                 wzStructure.LoadMsFile(baseWzPath);
@@ -152,6 +158,14 @@ namespace MapleStory.Common
 
         private static void OnWzFileFinding(object sender, FindWzEventArgs e)
         {
+            WzContext activeContext = ActiveContext.Value;
+            if (activeContext != null && activeContext.TryResolve(e, out Wz_Node activeWzNode, out Wz_File activeWzFile))
+            {
+                e.WzNode = activeWzNode;
+                e.WzFile = activeWzFile;
+                return;
+            }
+
             WzContext[] contexts;
             lock (SyncRoot)
             {
@@ -160,6 +174,11 @@ namespace MapleStory.Common
 
             for (int i = contexts.Length - 1; i >= 0; i--)
             {
+                if (contexts[i] == activeContext)
+                {
+                    continue;
+                }
+
                 if (contexts[i].TryResolve(e, out Wz_Node wzNode, out Wz_File wzFile))
                 {
                     e.WzNode = wzNode;
