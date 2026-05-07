@@ -187,7 +187,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             RuneProcessor processor = new RuneProcessor(
                 assets,
                 new SequenceRandom(
-                    new[] { 0, 5 },
+                    new[] { 0, 0, 5 },
                     new[] { 0.80, 0.10, 0.50, 0.50, 0.50, 0.80, 0.80, 0.80, 0.80, 0.80 }),
                 new RuneProcessorOptions
                 {
@@ -216,6 +216,37 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             }
 
             Assert.True(blueDominantPixels > 0);
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(3)]
+        [InlineData(4)]
+        [InlineData(5)]
+        [InlineData(6)]
+        public void Process_ColorRemapModesGenerateValidOutput(int mode)
+        {
+            using RuneAssetSet assets = CreateAssetSet(RuneArrowDirection.Right);
+            RuneProcessor processor = new RuneProcessor(
+                assets,
+                new SequenceRandom(new[] { 0, mode }, new[] { 0.0 }),
+                new RuneProcessorOptions
+                {
+                    ArrowCount = 1,
+                    EnableBases = false,
+                    EnableColorRemap = true,
+                    EnableNoise = false,
+                });
+            Sample sample = CreateSample(100, 100);
+
+            processor.Process(sample);
+
+            Assert.Single(sample.Items);
+            using Bitmap output = ReadBitmap(sample.ImageStream);
+            Assert.Equal(100, output.Width);
+            Assert.Equal(100, output.Height);
         }
 
 

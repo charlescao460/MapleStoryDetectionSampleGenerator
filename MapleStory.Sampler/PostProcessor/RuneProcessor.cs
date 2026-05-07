@@ -23,6 +23,7 @@ namespace MapleStory.Sampler.PostProcessor
         private const double OptionalTransformProbability = 0.50;
         private const double MinOpacity = 0.55;
         private const double MaxOpacity = 1.00;
+        private const int ColorRemapModeCount = 7;
 
         private readonly RuneAssetSet _assets;
         private readonly Random _random;
@@ -546,11 +547,192 @@ namespace MapleStory.Sampler.PostProcessor
         private Bitmap RemapColor(Bitmap source, double opacity)
         {
             using Bitmap argb = CreateArgbCopy(source);
-            Bitmap result = new Bitmap(argb.Width, argb.Height, PixelFormat.Format32bppArgb);
+            ColorRemapMode mode = (ColorRemapMode)_random.Next(0, ColorRemapModeCount);
+            switch (mode)
+            {
+                case ColorRemapMode.SaturatedHue:
+                    return RemapSaturatedHue(argb, opacity);
+                case ColorRemapMode.HsvJitter:
+                    return RemapHsvJitter(argb, opacity);
+                case ColorRemapMode.RgbAffine:
+                    return RemapRgbAffine(argb, opacity);
+                case ColorRemapMode.LabAbPerturbation:
+                    return RemapLabAb(argb, opacity);
+                case ColorRemapMode.OrthogonalRotation:
+                    return RemapOrthogonalRotation(argb, opacity);
+                case ColorRemapMode.ChannelPermutation:
+                    return RemapChannelPermutation(argb, opacity);
+                case ColorRemapMode.PcaBasis:
+                    return RemapPcaBasis(argb, opacity);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+            }
+        }
+
+        private Bitmap RemapSaturatedHue(Bitmap argb, double opacity)
+        {
             double targetHue = PickSaturatedTargetHue();
             double saturationScale = NextDouble(0.92, 1.20);
             double valueScale = NextDouble(1.02, 1.18);
 
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                RgbToHsv(pixel, out _, out double sourceSaturation, out double sourceValue);
+                double mappedSaturation = sourceSaturation < 0.15
+                    ? 0.28 + sourceSaturation * 1.40
+                    : Math.Max(0.68, sourceSaturation * saturationScale);
+                double mappedValue = Clamp(sourceValue * valueScale + 0.04, 0, 1);
+
+                if (sourceValue < 0.22)
+                {
+                    mappedSaturation *= 0.55;
+                    mappedValue = Clamp(sourceValue * 1.08, 0, 1);
+                }
+
+                return ColorFromHsv(targetHue, Clamp(mappedSaturation, 0, 1), mappedValue);
+            });
+        }
+
+        private Bitmap RemapHsvJitter(Bitmap argb, double opacity)
+        {
+            double hueShift = NextDouble(-180, 180);
+            double saturationScale = NextDouble(0, 2);
+            double saturationOffset = NextDouble(-1, 1);
+            double valueScale = NextDouble(0, 2);
+            double valueOffset = NextDouble(-1, 1);
+
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                RgbToHsv(pixel, out double hue, out double saturation, out double value);
+                return ColorFromHsv(
+                    hue + hueShift,
+                    Clamp(saturation * saturationScale + saturationOffset, 0, 1),
+                    Clamp(value * valueScale + valueOffset, 0, 1));
+            });
+        }
+
+        private Bitmap RemapRgbAffine(Bitmap argb, double opacity)
+        {
+            double[,] matrix = new double[3, 3];
+            double[] bias = new double[3];
+            for (int row = 0; row < 3; row++)
+            {
+                bias[row] = NextDouble(-1, 1);
+                for (int column = 0; column < 3; column++)
+                {
+                    matrix[row, column] = NextDouble(-2, 2);
+                }
+            }
+
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                double red = pixel.R / 255.0;
+                double green = pixel.G / 255.0;
+                double blue = pixel.B / 255.0;
+                return ColorFromRgb(
+                    matrix[0, 0] * red + matrix[0, 1] * green + matrix[0, 2] * blue + bias[0],
+                    matrix[1, 0] * red + matrix[1, 1] * green + matrix[1, 2] * blue + bias[1],
+                    matrix[2, 0] * red + matrix[2, 1] * green + matrix[2, 2] * blue + bias[2]);
+            });
+        }
+
+        private Bitmap RemapLabAb(Bitmap argb, double opacity)
+        {
+            double aOffset = NextDouble(-128, 128);
+            double bOffset = NextDouble(-128, 128);
+
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                RgbToLab(pixel, out double lightness, out double a, out double b);
+                return ColorFromLab(lightness, Clamp(a + aOffset, -128, 127), Clamp(b + bOffset, -128, 127));
+            });
+        }
+
+        private Bitmap RemapOrthogonalRotation(Bitmap argb, double opacity)
+        {
+            double[,] rotation = CreateRandomRotationMatrix();
+
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                double red = pixel.R / 255.0 - 0.5;
+                double green = pixel.G / 255.0 - 0.5;
+                double blue = pixel.B / 255.0 - 0.5;
+                return ColorFromRgb(
+                    0.5 + rotation[0, 0] * red + rotation[0, 1] * green + rotation[0, 2] * blue,
+                    0.5 + rotation[1, 0] * red + rotation[1, 1] * green + rotation[1, 2] * blue,
+                    0.5 + rotation[2, 0] * red + rotation[2, 1] * green + rotation[2, 2] * blue);
+            });
+        }
+
+        private Bitmap RemapChannelPermutation(Bitmap argb, double opacity)
+        {
+            int[][] permutations =
+            {
+                new[] { 0, 1, 2 },
+                new[] { 0, 2, 1 },
+                new[] { 1, 0, 2 },
+                new[] { 1, 2, 0 },
+                new[] { 2, 0, 1 },
+                new[] { 2, 1, 0 },
+            };
+            int[] permutation = permutations[_random.Next(0, permutations.Length)];
+
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                double[] channels =
+                {
+                    pixel.R / 255.0,
+                    pixel.G / 255.0,
+                    pixel.B / 255.0,
+                };
+                return ColorFromRgb(
+                    channels[permutation[0]],
+                    channels[permutation[1]],
+                    channels[permutation[2]]);
+            });
+        }
+
+        private Bitmap RemapPcaBasis(Bitmap argb, double opacity)
+        {
+            PcaColorBasis basis = ComputePcaColorBasis(argb);
+            double[] scales =
+            {
+                NextDouble(-2, 2),
+                NextDouble(-2, 2),
+                NextDouble(-2, 2),
+            };
+            double[] offsets =
+            {
+                NextDouble(-1, 1),
+                NextDouble(-1, 1),
+                NextDouble(-1, 1),
+            };
+
+            return ApplyColorMap(argb, opacity, pixel =>
+            {
+                double[] centered =
+                {
+                    pixel.R / 255.0 - basis.Mean[0],
+                    pixel.G / 255.0 - basis.Mean[1],
+                    pixel.B / 255.0 - basis.Mean[2],
+                };
+                double[] coefficients = MultiplyTranspose(basis.Vectors, centered);
+                for (int i = 0; i < coefficients.Length; i++)
+                {
+                    coefficients[i] = coefficients[i] * scales[i] + offsets[i];
+                }
+
+                double[] mapped = Multiply(basis.Vectors, coefficients);
+                return ColorFromRgb(
+                    basis.Mean[0] + mapped[0],
+                    basis.Mean[1] + mapped[1],
+                    basis.Mean[2] + mapped[2]);
+            });
+        }
+
+        private static Bitmap ApplyColorMap(Bitmap argb, double opacity, Func<Color, Color> mapColor)
+        {
+            Bitmap result = new Bitmap(argb.Width, argb.Height, PixelFormat.Format32bppArgb);
             for (int y = 0; y < argb.Height; y++)
             {
                 for (int x = 0; x < argb.Width; x++)
@@ -562,19 +744,7 @@ namespace MapleStory.Sampler.PostProcessor
                         continue;
                     }
 
-                    RgbToHsv(pixel, out _, out double sourceSaturation, out double sourceValue);
-                    double mappedSaturation = sourceSaturation < 0.15
-                        ? 0.28 + sourceSaturation * 1.40
-                        : Math.Max(0.68, sourceSaturation * saturationScale);
-                    double mappedValue = Clamp(sourceValue * valueScale + 0.04, 0, 1);
-
-                    if (sourceValue < 0.22)
-                    {
-                        mappedSaturation *= 0.55;
-                        mappedValue = Clamp(sourceValue * 1.08, 0, 1);
-                    }
-
-                    Color mapped = ColorFromHsv(targetHue, Clamp(mappedSaturation, 0, 1), mappedValue);
+                    Color mapped = mapColor(pixel);
                     result.SetPixel(
                         x,
                         y,
@@ -587,6 +757,37 @@ namespace MapleStory.Sampler.PostProcessor
             }
 
             return result;
+        }
+
+        private double[,] CreateRandomRotationMatrix()
+        {
+            double x;
+            double y;
+            double z;
+            double length;
+            do
+            {
+                x = NextDouble(-1, 1);
+                y = NextDouble(-1, 1);
+                z = NextDouble(-1, 1);
+                length = Math.Sqrt(x * x + y * y + z * z);
+            }
+            while (length < 0.000001);
+
+            x /= length;
+            y /= length;
+            z /= length;
+            double angle = NextDouble(0, Math.PI * 2);
+            double cos = Math.Cos(angle);
+            double sin = Math.Sin(angle);
+            double oneMinusCos = 1 - cos;
+
+            return new[,]
+            {
+                { cos + x * x * oneMinusCos, x * y * oneMinusCos - z * sin, x * z * oneMinusCos + y * sin },
+                { y * x * oneMinusCos + z * sin, cos + y * y * oneMinusCos, y * z * oneMinusCos - x * sin },
+                { z * x * oneMinusCos - y * sin, z * y * oneMinusCos + x * sin, cos + z * z * oneMinusCos },
+            };
         }
 
         private double PickSaturatedTargetHue()
@@ -689,6 +890,271 @@ namespace MapleStory.Sampler.PostProcessor
                 Clamp((int)Math.Round((red + match) * 255), 0, 255),
                 Clamp((int)Math.Round((green + match) * 255), 0, 255),
                 Clamp((int)Math.Round((blue + match) * 255), 0, 255));
+        }
+
+        private static Color ColorFromRgb(double red, double green, double blue)
+        {
+            return Color.FromArgb(
+                Clamp((int)Math.Round(Clamp(red, 0, 1) * 255), 0, 255),
+                Clamp((int)Math.Round(Clamp(green, 0, 1) * 255), 0, 255),
+                Clamp((int)Math.Round(Clamp(blue, 0, 1) * 255), 0, 255));
+        }
+
+        private static void RgbToLab(Color color, out double lightness, out double a, out double b)
+        {
+            double red = SrgbToLinear(color.R / 255.0);
+            double green = SrgbToLinear(color.G / 255.0);
+            double blue = SrgbToLinear(color.B / 255.0);
+
+            double x = (red * 0.4124564 + green * 0.3575761 + blue * 0.1804375) / 0.95047;
+            double y = red * 0.2126729 + green * 0.7151522 + blue * 0.0721750;
+            double z = (red * 0.0193339 + green * 0.1191920 + blue * 0.9503041) / 1.08883;
+
+            double fx = LabPivot(x);
+            double fy = LabPivot(y);
+            double fz = LabPivot(z);
+            lightness = 116 * fy - 16;
+            a = 500 * (fx - fy);
+            b = 200 * (fy - fz);
+        }
+
+        private static Color ColorFromLab(double lightness, double a, double b)
+        {
+            double fy = (Clamp(lightness, 0, 100) + 16) / 116;
+            double fx = fy + a / 500;
+            double fz = fy - b / 200;
+
+            double x = 0.95047 * InverseLabPivot(fx);
+            double y = InverseLabPivot(fy);
+            double z = 1.08883 * InverseLabPivot(fz);
+
+            double red = LinearToSrgb(x * 3.2404542 + y * -1.5371385 + z * -0.4985314);
+            double green = LinearToSrgb(x * -0.9692660 + y * 1.8760108 + z * 0.0415560);
+            double blue = LinearToSrgb(x * 0.0556434 + y * -0.2040259 + z * 1.0572252);
+            return ColorFromRgb(red, green, blue);
+        }
+
+        private static double SrgbToLinear(double value)
+        {
+            return value <= 0.04045
+                ? value / 12.92
+                : Math.Pow((value + 0.055) / 1.055, 2.4);
+        }
+
+        private static double LinearToSrgb(double value)
+        {
+            return value <= 0.0031308
+                ? 12.92 * value
+                : 1.055 * Math.Pow(value, 1.0 / 2.4) - 0.055;
+        }
+
+        private static double LabPivot(double value)
+        {
+            const double delta = 6.0 / 29.0;
+            return value > delta * delta * delta
+                ? Math.Pow(value, 1.0 / 3.0)
+                : value / (3 * delta * delta) + 4.0 / 29.0;
+        }
+
+        private static double InverseLabPivot(double value)
+        {
+            const double delta = 6.0 / 29.0;
+            return value > delta
+                ? value * value * value
+                : 3 * delta * delta * (value - 4.0 / 29.0);
+        }
+
+        private static PcaColorBasis ComputePcaColorBasis(Bitmap argb)
+        {
+            double[] mean = new double[3];
+            int count = 0;
+            for (int y = 0; y < argb.Height; y++)
+            {
+                for (int x = 0; x < argb.Width; x++)
+                {
+                    Color pixel = argb.GetPixel(x, y);
+                    if (pixel.A == 0)
+                    {
+                        continue;
+                    }
+
+                    mean[0] += pixel.R / 255.0;
+                    mean[1] += pixel.G / 255.0;
+                    mean[2] += pixel.B / 255.0;
+                    count++;
+                }
+            }
+
+            if (count == 0)
+            {
+                return new PcaColorBasis(mean, CreateIdentityMatrix());
+            }
+
+            mean[0] /= count;
+            mean[1] /= count;
+            mean[2] /= count;
+            double[,] covariance = new double[3, 3];
+            for (int y = 0; y < argb.Height; y++)
+            {
+                for (int x = 0; x < argb.Width; x++)
+                {
+                    Color pixel = argb.GetPixel(x, y);
+                    if (pixel.A == 0)
+                    {
+                        continue;
+                    }
+
+                    double[] centered =
+                    {
+                        pixel.R / 255.0 - mean[0],
+                        pixel.G / 255.0 - mean[1],
+                        pixel.B / 255.0 - mean[2],
+                    };
+                    for (int row = 0; row < 3; row++)
+                    {
+                        for (int column = 0; column < 3; column++)
+                        {
+                            covariance[row, column] += centered[row] * centered[column];
+                        }
+                    }
+                }
+            }
+
+            double scale = count > 1 ? 1.0 / (count - 1) : 1.0;
+            for (int row = 0; row < 3; row++)
+            {
+                for (int column = 0; column < 3; column++)
+                {
+                    covariance[row, column] *= scale;
+                }
+            }
+
+            return new PcaColorBasis(mean, ComputeSymmetricEigenvectors(covariance));
+        }
+
+        private static double[,] ComputeSymmetricEigenvectors(double[,] matrix)
+        {
+            double[,] values = (double[,])matrix.Clone();
+            double[,] vectors = CreateIdentityMatrix();
+            for (int iteration = 0; iteration < 32; iteration++)
+            {
+                int p = 0;
+                int q = 1;
+                double max = Math.Abs(values[p, q]);
+                for (int row = 0; row < 3; row++)
+                {
+                    for (int column = row + 1; column < 3; column++)
+                    {
+                        double current = Math.Abs(values[row, column]);
+                        if (current > max)
+                        {
+                            max = current;
+                            p = row;
+                            q = column;
+                        }
+                    }
+                }
+
+                if (max < 0.000000000001)
+                {
+                    break;
+                }
+
+                double angle = 0.5 * Math.Atan2(2 * values[p, q], values[q, q] - values[p, p]);
+                double cos = Math.Cos(angle);
+                double sin = Math.Sin(angle);
+                double app = values[p, p];
+                double aqq = values[q, q];
+                double apq = values[p, q];
+
+                for (int k = 0; k < 3; k++)
+                {
+                    if (k == p || k == q)
+                    {
+                        continue;
+                    }
+
+                    double akp = values[k, p];
+                    double akq = values[k, q];
+                    values[k, p] = values[p, k] = cos * akp - sin * akq;
+                    values[k, q] = values[q, k] = sin * akp + cos * akq;
+                }
+
+                values[p, p] = cos * cos * app - 2 * sin * cos * apq + sin * sin * aqq;
+                values[q, q] = sin * sin * app + 2 * sin * cos * apq + cos * cos * aqq;
+                values[p, q] = 0;
+                values[q, p] = 0;
+
+                for (int row = 0; row < 3; row++)
+                {
+                    double vip = vectors[row, p];
+                    double viq = vectors[row, q];
+                    vectors[row, p] = cos * vip - sin * viq;
+                    vectors[row, q] = sin * vip + cos * viq;
+                }
+            }
+
+            SortEigenvectors(values, vectors);
+            return vectors;
+        }
+
+        private static void SortEigenvectors(double[,] eigenvalues, double[,] vectors)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                int maxIndex = i;
+                double maxValue = eigenvalues[i, i];
+                for (int j = i + 1; j < 3; j++)
+                {
+                    if (eigenvalues[j, j] > maxValue)
+                    {
+                        maxValue = eigenvalues[j, j];
+                        maxIndex = j;
+                    }
+                }
+
+                if (maxIndex == i)
+                {
+                    continue;
+                }
+
+                for (int row = 0; row < 3; row++)
+                {
+                    (vectors[row, i], vectors[row, maxIndex]) = (vectors[row, maxIndex], vectors[row, i]);
+                }
+
+                (eigenvalues[i, i], eigenvalues[maxIndex, maxIndex]) = (eigenvalues[maxIndex, maxIndex], eigenvalues[i, i]);
+            }
+        }
+
+        private static double[,] CreateIdentityMatrix()
+        {
+            return new[,]
+            {
+                { 1.0, 0.0, 0.0 },
+                { 0.0, 1.0, 0.0 },
+                { 0.0, 0.0, 1.0 },
+            };
+        }
+
+        private static double[] Multiply(double[,] matrix, double[] vector)
+        {
+            return new[]
+            {
+                matrix[0, 0] * vector[0] + matrix[0, 1] * vector[1] + matrix[0, 2] * vector[2],
+                matrix[1, 0] * vector[0] + matrix[1, 1] * vector[1] + matrix[1, 2] * vector[2],
+                matrix[2, 0] * vector[0] + matrix[2, 1] * vector[1] + matrix[2, 2] * vector[2],
+            };
+        }
+
+        private static double[] MultiplyTranspose(double[,] matrix, double[] vector)
+        {
+            return new[]
+            {
+                matrix[0, 0] * vector[0] + matrix[1, 0] * vector[1] + matrix[2, 0] * vector[2],
+                matrix[0, 1] * vector[0] + matrix[1, 1] * vector[1] + matrix[2, 1] * vector[2],
+                matrix[0, 2] * vector[0] + matrix[1, 2] * vector[1] + matrix[2, 2] * vector[2],
+            };
         }
 
         private static double NormalizeHue(double hue)
@@ -870,6 +1336,30 @@ namespace MapleStory.Sampler.PostProcessor
         private static double Clamp(double value, double minValue, double maxValue)
         {
             return Math.Min(Math.Max(value, minValue), maxValue);
+        }
+
+        private enum ColorRemapMode
+        {
+            SaturatedHue = 0,
+            HsvJitter = 1,
+            RgbAffine = 2,
+            LabAbPerturbation = 3,
+            OrthogonalRotation = 4,
+            ChannelPermutation = 5,
+            PcaBasis = 6,
+        }
+
+        private readonly struct PcaColorBasis
+        {
+            public PcaColorBasis(double[] mean, double[,] vectors)
+            {
+                Mean = mean;
+                Vectors = vectors;
+            }
+
+            public double[] Mean { get; }
+
+            public double[,] Vectors { get; }
         }
 
         private readonly struct TransformSpec
