@@ -23,9 +23,9 @@ With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.
 # Run
 (Assuming assemblies are built with `Release` configuration. `Debug` configuration is similar)
 1. Use `WzComparerR2.exe` to find the desired map you want to sample. Assuming `993134200.img` is the map you want in Limina.
-2. From the solution root, prepare a YAML config file. A checked-in example is available at `sample-generator.yml`.
+2. From the solution root, prepare a YAML config file. A checked-in example is available at `Examples\sample-generator.yml`.
 3. If you want synthetic players, configure avatar WZ part IDs in the `player` post-processor. The generator renders player frames on the fly through `MapleStory.Avatar`.
-4. Run `dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config ".\sample-generator.yml"`</br>
+4. Run `dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config ".\Examples\sample-generator.yml"`</br>
 You can run `.\MapleStory.MachineLearningSampleGenerator.exe --help` for usage hint, or execute the built binary directly with `--config <path>`. The config file is the single source of truth for maps, rendering, output, and post-processors.
 
 Example YAML:
@@ -43,8 +43,7 @@ render:
   height: 768
 
 sampling:
-  xStep: 500
-  yStep: 500
+  count: 1000
   intervalMs: 0
 
 postProcessors:
@@ -60,22 +59,45 @@ maps:
   - id: 993134200
   - id: 450007010
     sampling:
-      xStep: 250
+      count: 2000
     postProcessors: []
 ```
 
 Notes about the YAML format:
 * `mode` is required. Use `character` for normal map/object samples and `rune` for rune-arrow keypoint samples.
 * `concurrency` is optional and controls how many map renders run at once. It defaults to `1`.
-* `maps` is required and each `id` should be the numeric map id without `.img`.
+* `maps` is required. The legacy sequence form lists explicit map IDs, and each `id` should be the numeric map id without `.img`.
 * Root `sampling` and `postProcessors` act as defaults for every map.
+* `sampling.count` is required and controls how many uniformly random camera positions are sampled from each map.
 * A map-level `sampling` block overrides only the fields it sets.
 * A map-level `postProcessors` block replaces the root processor list. `postProcessors: []` disables inherited processors for that map.
 * `player.count` is the number of generated player instances added to each sampled screenshot. It defaults to `3` when omitted.
 * `player.avatars[].parts` is an ordered list of WZ part IDs. Later IDs replace earlier slot conflicts, matching the avatar generator behavior.
 * Relative paths are resolved from the YAML file location.
 
-Rune mode uses the same `maps`, `render`, and `sampling` sections, but requires `output.format: coco` and does not support `postProcessors`. Each output image is a center-square crop with four generated `rune_arrow` annotations and two COCO keypoints per arrow.
+Rune mode uses the same `render` and `sampling` sections, but requires `output.format: coco` and does not support `postProcessors`. Each output image is a center-square crop with four generated `rune_arrow` annotations and two COCO keypoints per arrow.
+
+Rune mode can also randomly choose maps from all numeric `*.img` map nodes in the MapleStory data. Explicit entries are always included first; `random.count` adds that many additional maps and excludes duplicate explicit IDs. Add `seed` when you need repeatable selection.
+
+```yaml
+mode: rune
+output:
+  format: coco
+  path: ./rune-output
+  name: rune-sample
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 1000
+  intervalMs: 0
+maps:
+  entries:
+    - id: 410013660
+  random:
+    count: 50
+    seed: 12345
+```
 
 # Note
 * Since NPCs look like players, including them without annotation could result a negative effect on our model. Therefore, by default, we changed [WzComparerR2.MapRender/MapData.cs](https://github.com/Kagamia/WzComparerR2/blob/main/WzComparerR2.MapRender/MapData.cs) to prevent any NPC data loaded into map render when invoking from `MapleStory.MachineLearningSampleGenerator.exe`,

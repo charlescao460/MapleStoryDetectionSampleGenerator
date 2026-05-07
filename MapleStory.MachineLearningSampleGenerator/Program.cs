@@ -181,7 +181,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                 }
                 postProcessors = createPostProcessors(map);
                 Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-                sampler.SampleAll(map.XStep, map.YStep, writer, map.IntervalMs, postProcessors.Processors, map.Id);
+                sampler.SampleAll(map.Count, writer, map.IntervalMs, postProcessors.Processors, map.Id);
             }
             finally
             {

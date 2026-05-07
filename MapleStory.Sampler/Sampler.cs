@@ -16,6 +16,7 @@ namespace MapleStory.Sampler
         private const long JPEG_RATIO = 90L;
         private const double ITEM_PARTIAL_AREA_THRESHOLD = 0.70;
         private readonly MapRenderInvoker _renderInvoker;
+        private readonly Random _random = new Random();
 
         public Sampler(MapRenderInvoker renderInvoker)
         {
@@ -46,61 +47,83 @@ namespace MapleStory.Sampler
         }
 
         /// <summary>
-        /// Sample all based on provided step
+        /// Randomly sample the map by uniformly choosing camera centers in the valid map camera range.
         /// </summary>
-        /// <param name="xStep">step in X to sample</param>
-        /// <param name="yStep">step in Y to sample</param>
+        /// <param name="sampleCount">Number of samples to generate.</param>
         /// <param name="writer">Writer to save result</param>
         /// <param name="interval">Sampling time interval, in ms.</param>
         /// <param name="postProcessors">Optional post-processing pipeline applied in order before encoding.</param>
-        public void SampleAll(int xStep, int yStep, IDatasetWriter writer, int interval = 0,
+        public void SampleAll(int sampleCount, IDatasetWriter writer, int interval = 0,
             IReadOnlyList<IPostProcessor> postProcessors = null, string mapId = null)
         {
-            xStep = Math.Abs(xStep);
-            yStep = Math.Abs(yStep);
-            int initX = _renderInvoker.WorldOriginX + _renderInvoker.ScreenWidth / 2;
-            int initY = _renderInvoker.WorldOriginY + _renderInvoker.ScreenHeight / 2;
-            int endX = _renderInvoker.WorldOriginX + _renderInvoker.WorldWidth - _renderInvoker.ScreenWidth / 2;
-            int endY = _renderInvoker.WorldOriginY + _renderInvoker.WorldHeight - _renderInvoker.ScreenHeight / 2;
-
-            int count = 0;
-            int total = (int)(Math.Round((double)(endX - initX) / xStep, MidpointRounding.ToPositiveInfinity) *
-                         Math.Round((double)(endY - initY) / yStep, MidpointRounding.ToPositiveInfinity));
-
-            for (int x = initX; x < endX; x += xStep)
+            if (sampleCount <= 0)
             {
-                for (int y = initY; y < endY; y += yStep)
+                throw new ArgumentOutOfRangeException(nameof(sampleCount), "Sample count must be greater than 0.");
+            }
+
+            (int minX, int maxX) = GetCameraCenterRange(
+                _renderInvoker.WorldOriginX,
+                _renderInvoker.WorldWidth,
+                _renderInvoker.ScreenWidth);
+            (int minY, int maxY) = GetCameraCenterRange(
+                _renderInvoker.WorldOriginY,
+                _renderInvoker.WorldHeight,
+                _renderInvoker.ScreenHeight);
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                int x = NextInclusive(minX, maxX);
+                int y = NextInclusive(minY, maxY);
+                try
                 {
-                    try
-                    {
-                        Console.WriteLine($"Sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at center x={x},y={y}....");
-                        // Move Camera
-                        _renderInvoker.MoveCamera(x, y);
-                        // Do sample
-                        Sample sample = SampleSingle(postProcessors);
-                        writer.Write(sample);
-                    }
-                    catch (Exception ex)
+                    Console.WriteLine($"Sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at random center x={x},y={y}....");
+                    _renderInvoker.MoveCamera(x, y);
+                    Sample sample = SampleSingle(postProcessors);
+                    writer.Write(sample);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"Error sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at center x={x},y={y}: {ex}");
+                    if (!_renderInvoker.IsRunning)
                     {
                         Console.Error.WriteLine(
-                            $"Error sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at center x={x},y={y}: {ex}");
-                        if (!_renderInvoker.IsRunning)
-                        {
-                            Console.Error.WriteLine(
-                                $"Stopping map {mapId ?? _renderInvoker.CurrentMap.ToString()} because its render thread is no longer running.");
-                            return;
-                        }
+                            $"Stopping map {mapId ?? _renderInvoker.CurrentMap.ToString()} because its render thread is no longer running.");
+                        return;
                     }
-                    finally
-                    {
-                        count++;
-                        Console.WriteLine($"Progress: {count}/{total}, {(double)count / total * 100}%\n");
-                        Thread.Sleep(interval);
-                    }
+                }
+                finally
+                {
+                    int completed = i + 1;
+                    Console.WriteLine($"Progress: {completed}/{sampleCount}, {(double)completed / sampleCount * 100}%\n");
+                    Thread.Sleep(interval);
                 }
             }
             Console.WriteLine($"############## All Samples Captured for map {mapId ?? _renderInvoker.CurrentMap.ToString()} ##############");
             return;
+        }
+
+        private static (int Min, int Max) GetCameraCenterRange(int worldOrigin, int worldSize, int screenSize)
+        {
+            int min = worldOrigin + screenSize / 2;
+            int max = worldOrigin + worldSize - screenSize / 2;
+            if (max >= min)
+            {
+                return (min, max);
+            }
+
+            int center = worldOrigin + worldSize / 2;
+            return (center, center);
+        }
+
+        private int NextInclusive(int minValue, int maxValue)
+        {
+            if (maxValue <= minValue)
+            {
+                return minValue;
+            }
+
+            return _random.Next(minValue, maxValue + 1);
         }
 
         private MemoryStream EncodeScreenShot(Stream screenShotStream, int width, int height)

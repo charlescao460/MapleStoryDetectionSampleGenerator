@@ -10,8 +10,7 @@ render:
   height: 768
 
 sampling:
-  xStep: 500
-  yStep: 500
+  count: 1000
   intervalMs: 0
 
 postProcessors:
@@ -27,5 +26,5 @@ maps:
   - id: 993134200
   - id: 450007010
     sampling:
-      xStep: 250
+      count: 2000
     postProcessors: []

@@ -10,6 +10,18 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 {
     internal sealed class ConfigurationResolver
     {
+        private readonly IMapCatalog _mapCatalog;
+
+        public ConfigurationResolver()
+            : this(new WzMapCatalog())
+        {
+        }
+
+        internal ConfigurationResolver(IMapCatalog mapCatalog)
+        {
+            _mapCatalog = mapCatalog ?? throw new ArgumentNullException(nameof(mapCatalog));
+        }
+
         public ResolvedRunConfig Resolve(GeneratorConfig config, string configPath)
         {
             if (config == null)
@@ -42,7 +54,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             IReadOnlyList<PostProcessorConfig> defaultPostProcessors =
                 ResolvePostProcessors(config.PostProcessors, configDirectory, "postProcessors");
 
-            if (config.Maps == null || config.Maps.Count == 0)
+            if ((config.Maps == null || config.Maps.Count == 0) && config.RandomMaps == null)
             {
                 throw new ConfigurationException("maps must contain at least one entry.");
             }
@@ -58,8 +70,16 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                     ? defaultPostProcessors
                     : ResolvePostProcessors(map.PostProcessors, configDirectory, $"{mapContext}.postProcessors");
 
-                maps.Add(new ResolvedMapConfig(id, sampling.XStep, sampling.YStep, sampling.IntervalMs, postProcessors));
+                maps.Add(new ResolvedMapConfig(id, sampling.Count, sampling.IntervalMs, postProcessors));
             }
+
+            AppendRandomMaps(
+                generationMode,
+                config.RandomMaps,
+                mapleStoryPath,
+                textEncoding,
+                defaultSampling,
+                maps);
 
             ValidateModePostProcessors(generationMode, config, maps);
 
@@ -75,6 +95,64 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 renderHeight,
                 concurrency,
                 maps.AsReadOnly());
+        }
+
+        private void AppendRandomMaps(
+            GenerationMode generationMode,
+            RandomMapConfig randomMaps,
+            string mapleStoryPath,
+            Encoding textEncoding,
+            ResolvedSampling defaultSampling,
+            List<ResolvedMapConfig> maps)
+        {
+            if (randomMaps == null)
+            {
+                return;
+            }
+
+            if (generationMode != GenerationMode.Rune)
+            {
+                throw new ConfigurationException("maps.random is only supported when mode is 'rune'.");
+            }
+
+            HashSet<string> existingIds = new HashSet<string>(
+                maps.Select(map => map.Id),
+                StringComparer.Ordinal);
+            List<string> candidates = _mapCatalog
+                .ListMapIds(mapleStoryPath, textEncoding)
+                .Where(id => !string.IsNullOrWhiteSpace(id) && id.All(char.IsDigit))
+                .Where(id => !existingIds.Contains(id))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList();
+
+            if (randomMaps.Count > candidates.Count)
+            {
+                throw new ConfigurationException(
+                    $"maps.random.count requested {randomMaps.Count} maps, but only {candidates.Count} candidate maps are available.");
+            }
+
+            Random random = randomMaps.Seed.HasValue
+                ? new Random(randomMaps.Seed.Value)
+                : new Random();
+            Shuffle(candidates, random);
+            foreach (string id in candidates.Take(randomMaps.Count))
+            {
+                maps.Add(new ResolvedMapConfig(
+                    id,
+                    defaultSampling.Count,
+                    defaultSampling.IntervalMs,
+                    Array.Empty<PostProcessorConfig>()));
+            }
+        }
+
+        private static void Shuffle<T>(IList<T> values, Random random)
+        {
+            for (int i = values.Count - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (values[i], values[j]) = (values[j], values[i]);
+            }
         }
 
         private static int ResolveConcurrency(int? concurrency)
@@ -205,8 +283,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             }
 
             return ResolveSampling(
-                sampling.XStep,
-                sampling.YStep,
+                sampling.Count,
                 sampling.IntervalMs,
                 "sampling");
         }
@@ -221,29 +298,20 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 return defaults;
             }
 
-            int? xStep = sampling.XStep ?? defaults.XStep;
-            int? yStep = sampling.YStep ?? defaults.YStep;
+            int? count = sampling.Count ?? defaults.Count;
             int? intervalMs = sampling.IntervalMs ?? defaults.IntervalMs;
-            return ResolveSampling(xStep, yStep, intervalMs, context);
+            return ResolveSampling(count, intervalMs, context);
         }
 
-        private static ResolvedSampling ResolveSampling(int? xStep, int? yStep, int? intervalMs, string context)
+        private static ResolvedSampling ResolveSampling(int? count, int? intervalMs, string context)
         {
-            if (!xStep.HasValue)
+            if (!count.HasValue)
             {
-                throw new ConfigurationException($"{context}.xStep is required.");
+                throw new ConfigurationException($"{context}.count is required.");
             }
-            if (!yStep.HasValue)
+            if (count.Value <= 0)
             {
-                throw new ConfigurationException($"{context}.yStep is required.");
-            }
-            if (xStep.Value <= 0)
-            {
-                throw new ConfigurationException($"{context}.xStep must be greater than 0.");
-            }
-            if (yStep.Value <= 0)
-            {
-                throw new ConfigurationException($"{context}.yStep must be greater than 0.");
+                throw new ConfigurationException($"{context}.count must be greater than 0.");
             }
 
             int resolvedInterval = intervalMs ?? 0;
@@ -252,7 +320,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 throw new ConfigurationException($"{context}.intervalMs cannot be negative.");
             }
 
-            return new ResolvedSampling(xStep.Value, yStep.Value, resolvedInterval);
+            return new ResolvedSampling(count.Value, resolvedInterval);
         }
 
         private static IReadOnlyList<PostProcessorConfig> ResolvePostProcessors(
@@ -386,16 +454,13 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 
         private readonly struct ResolvedSampling
         {
-            public ResolvedSampling(int xStep, int yStep, int intervalMs)
+            public ResolvedSampling(int count, int intervalMs)
             {
-                XStep = xStep;
-                YStep = yStep;
+                Count = count;
                 IntervalMs = intervalMs;
             }
 
-            public int XStep { get; }
-
-            public int YStep { get; }
+            public int Count { get; }
 
             public int IntervalMs { get; }
         }

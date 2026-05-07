@@ -22,6 +22,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public IList<PostProcessorConfig> PostProcessors { get; set; } = new List<PostProcessorConfig>();
 
         public IList<MapConfig> Maps { get; set; } = new List<MapConfig>();
+
+        public RandomMapConfig RandomMaps { get; set; }
     }
 
     internal sealed class RenderConfig
@@ -33,9 +35,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 
     internal sealed class SamplingConfig
     {
-        public int? XStep { get; set; }
-
-        public int? YStep { get; set; }
+        public int? Count { get; set; }
 
         public int? IntervalMs { get; set; }
     }
@@ -56,6 +56,13 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public SamplingConfig Sampling { get; set; }
 
         public IList<PostProcessorConfig> PostProcessors { get; set; }
+    }
+
+    internal sealed class RandomMapConfig
+    {
+        public int Count { get; set; }
+
+        public int? Seed { get; set; }
     }
 
     internal abstract class PostProcessorConfig
@@ -143,23 +150,19 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
     {
         public ResolvedMapConfig(
             string id,
-            int xStep,
-            int yStep,
+            int count,
             int intervalMs,
             IReadOnlyList<PostProcessorConfig> postProcessors)
         {
             Id = id;
-            XStep = xStep;
-            YStep = yStep;
+            Count = count;
             IntervalMs = intervalMs;
             PostProcessors = postProcessors;
         }
 
         public string Id { get; }
 
-        public int XStep { get; }
-
-        public int YStep { get; }
+        public int Count { get; }
 
         public int IntervalMs { get; }
 

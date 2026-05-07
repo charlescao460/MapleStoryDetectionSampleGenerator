@@ -96,7 +96,6 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             return new ResolvedMapConfig(
                 "993134200",
                 5,
-                5,
                 0,
                 new PostProcessorConfig[] { playerConfig });
         }

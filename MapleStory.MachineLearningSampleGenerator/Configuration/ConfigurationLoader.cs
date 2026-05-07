@@ -38,6 +38,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 new[] { "mode", "mapleStoryPath", "encoding", "output", "render", "sampling", "concurrency", "postProcessors", "maps" },
                 new[] { "mode", "output", "render", "sampling", "maps" });
 
+            ParsedMaps maps = ParseMaps(root["maps"], "maps");
+
             return new GeneratorConfig
             {
                 Mode = ReadRequiredString(root, "mode", "mode"),
@@ -50,7 +52,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 PostProcessors = root.TryGetValue("postProcessors", out YamlNode processorsNode)
                     ? ParsePostProcessors(processorsNode, "postProcessors")
                     : new List<PostProcessorConfig>(),
-                Maps = ParseMaps(root["maps"], "maps"),
+                Maps = maps.Entries,
+                RandomMaps = maps.Random,
             };
         }
 
@@ -82,19 +85,37 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         private static SamplingConfig ParseSampling(YamlNode node, string context)
         {
             Dictionary<string, YamlNode> sampling = ToDictionary(RequireMapping(node, context), context);
-            ValidateKeys(sampling, context, new[] { "xStep", "yStep", "intervalMs" }, Array.Empty<string>());
+            ValidateKeys(sampling, context, new[] { "count", "intervalMs" }, Array.Empty<string>());
 
             return new SamplingConfig
             {
-                XStep = ReadOptionalInt(sampling, "xStep", $"{context}.xStep"),
-                YStep = ReadOptionalInt(sampling, "yStep", $"{context}.yStep"),
+                Count = ReadOptionalInt(sampling, "count", $"{context}.count"),
                 IntervalMs = ReadOptionalInt(sampling, "intervalMs", $"{context}.intervalMs"),
             };
         }
 
-        private static IList<MapConfig> ParseMaps(YamlNode node, string context)
+        private static ParsedMaps ParseMaps(YamlNode node, string context)
         {
-            YamlSequenceNode sequence = RequireSequence(node, context);
+            if (node is YamlSequenceNode sequence)
+            {
+                return new ParsedMaps(ParseMapEntries(sequence, context), null);
+            }
+
+            Dictionary<string, YamlNode> maps = ToDictionary(RequireMapping(node, context), context);
+            ValidateKeys(maps, context, new[] { "entries", "random" }, Array.Empty<string>());
+
+            IList<MapConfig> entries = maps.TryGetValue("entries", out YamlNode entriesNode)
+                ? ParseMapEntries(RequireSequence(entriesNode, $"{context}.entries"), $"{context}.entries")
+                : new List<MapConfig>();
+            RandomMapConfig random = maps.TryGetValue("random", out YamlNode randomNode)
+                ? ParseRandomMaps(randomNode, $"{context}.random")
+                : null;
+
+            return new ParsedMaps(entries, random);
+        }
+
+        private static IList<MapConfig> ParseMapEntries(YamlSequenceNode sequence, string context)
+        {
             List<MapConfig> maps = new List<MapConfig>();
             for (int i = 0; i < sequence.Children.Count; i++)
             {
@@ -115,6 +136,18 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             }
 
             return maps;
+        }
+
+        private static RandomMapConfig ParseRandomMaps(YamlNode node, string context)
+        {
+            Dictionary<string, YamlNode> random = ToDictionary(RequireMapping(node, context), context);
+            ValidateKeys(random, context, new[] { "count", "seed" }, new[] { "count" });
+
+            return new RandomMapConfig
+            {
+                Count = ParsePositiveInt(random["count"], $"{context}.count"),
+                Seed = ReadOptionalInt(random, "seed", $"{context}.seed"),
+            };
         }
 
         private static IList<PostProcessorConfig> ParsePostProcessors(YamlNode node, string context)
@@ -340,6 +373,19 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             }
 
             return values;
+        }
+
+        private readonly struct ParsedMaps
+        {
+            public ParsedMaps(IList<MapConfig> entries, RandomMapConfig random)
+            {
+                Entries = entries;
+                Random = random;
+            }
+
+            public IList<MapConfig> Entries { get; }
+
+            public RandomMapConfig Random { get; }
         }
     }
 }

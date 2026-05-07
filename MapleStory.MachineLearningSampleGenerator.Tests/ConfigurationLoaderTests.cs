@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text;
 using MapleStory.MachineLearningSampleGenerator.Configuration;
 using Xunit;
 
@@ -25,8 +28,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 ");
@@ -59,8 +61,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 ");
@@ -89,8 +90,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
@@ -113,8 +113,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
@@ -138,8 +137,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
@@ -163,8 +161,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 ");
@@ -194,8 +191,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
@@ -219,8 +215,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 postProcessors:
   - type: player
     avatars:
@@ -248,14 +243,240 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
     postProcessors:
       - type: player
         avatars:
           - parts: [2000, 12003]
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_RuneModeWithRandomMaps_SelectsRequestedCount()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+  intervalMs: 7
+maps:
+  random:
+    count: 2
+    seed: 123
+", mapCatalog: new FakeMapCatalog("100000000", "200000000", "300000000"));
+
+            Assert.Equal(2, config.Maps.Count);
+            Assert.All(config.Maps, map =>
+            {
+                Assert.Equal(5, map.Count);
+                Assert.Equal(7, map.IntervalMs);
+                Assert.Empty(map.PostProcessors);
+            });
+        }
+
+        [Fact]
+        public void LoadResolved_RuneModeWithRandomMapsAndSeed_IsStable()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+            const string yaml = @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  random:
+    count: 3
+    seed: 12345
+";
+            FakeMapCatalog mapCatalog = new FakeMapCatalog("100000000", "200000000", "300000000", "400000000", "500000000");
+
+            string[] first = LoadResolved(workspace, yaml, mapCatalog: mapCatalog).Maps.Select(map => map.Id).ToArray();
+            string[] second = LoadResolved(workspace, yaml, mapCatalog: mapCatalog).Maps.Select(map => map.Id).ToArray();
+
+            Assert.Equal(first, second);
+        }
+
+        [Fact]
+        public void LoadResolved_RuneModeWithEntriesAndRandomMaps_ExcludesExplicitIds()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  entries:
+    - id: 100000000
+  random:
+    count: 2
+    seed: 10
+", mapCatalog: new FakeMapCatalog("100000000", "200000000", "300000000", "400000000"));
+
+            Assert.Equal("100000000", config.Maps[0].Id);
+            Assert.Equal(3, config.Maps.Count);
+            Assert.Equal(3, config.Maps.Select(map => map.Id).Distinct().Count());
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void LoadResolved_RandomMapCountMustBePositive_Throws(int count)
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, $@"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  random:
+    count: {count}
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_RandomMapCountGreaterThanAvailable_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  random:
+    count: 3
+", mapCatalog: new FakeMapCatalog("100000000", "200000000")));
+        }
+
+        [Fact]
+        public void LoadResolved_CharacterModeWithRandomMaps_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  random:
+    count: 1
+", mapCatalog: new FakeMapCatalog("100000000")));
+        }
+
+        [Fact]
+        public void LoadResolved_UnknownMapsKey_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  unexpected: true
+  random:
+    count: 1
+"));
+        }
+
+        [Fact]
+        public void LoadResolved_UnknownRandomMapsKey_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  random:
+    count: 1
+    unexpected: true
 "));
         }
 
@@ -277,19 +498,16 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
   intervalMs: 7
 maps:
   - id: 993134200
   - id: 450007010
 ");
 
-            Assert.Equal(5, config.Maps[0].XStep);
-            Assert.Equal(6, config.Maps[0].YStep);
+            Assert.Equal(5, config.Maps[0].Count);
             Assert.Equal(7, config.Maps[0].IntervalMs);
-            Assert.Equal(5, config.Maps[1].XStep);
-            Assert.Equal(6, config.Maps[1].YStep);
+            Assert.Equal(5, config.Maps[1].Count);
             Assert.Equal(7, config.Maps[1].IntervalMs);
         }
 
@@ -311,18 +529,41 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
   intervalMs: 7
 maps:
   - id: 993134200
     sampling:
-      xStep: 10
+      count: 10
 ");
 
-            Assert.Equal(10, config.Maps[0].XStep);
-            Assert.Equal(6, config.Maps[0].YStep);
+            Assert.Equal(10, config.Maps[0].Count);
             Assert.Equal(7, config.Maps[0].IntervalMs);
+        }
+
+        [Fact]
+        public void LoadResolved_LegacyStepSamplingKeys_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  xStep: 500
+  yStep: 500
+maps:
+  - id: 993134200
+"));
         }
 
         [Fact]
@@ -343,8 +584,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 postProcessors:
   - type: player
     count: 2
@@ -392,8 +632,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 postProcessors:
   - type: player
     avatars:
@@ -425,8 +664,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 postProcessors:
   - type: player
     avatars:
@@ -459,8 +697,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 postProcessors:
   - type: mystery
 maps:
@@ -486,8 +723,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 postProcessors:
   - type: player
     imageDirectory: ./players
@@ -558,8 +794,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 " + postProcessorYaml + @"
 maps:
   - id: 993134200
@@ -587,8 +822,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
@@ -612,8 +846,7 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
@@ -636,14 +869,17 @@ render:
   width: 1366
   height: 768
 sampling:
-  xStep: 5
-  yStep: 6
+  count: 5
 maps:
   - id: 993134200
 "));
         }
 
-        private static ResolvedRunConfig LoadResolved(TestWorkspace workspace, string yaml, string configPath = null)
+        private static ResolvedRunConfig LoadResolved(
+            TestWorkspace workspace,
+            string yaml,
+            string configPath = null,
+            IMapCatalog mapCatalog = null)
         {
             string resolvedConfigPath = configPath ?? Path.Combine(workspace.RootPath, "generator.yml");
             string directory = Path.GetDirectoryName(resolvedConfigPath);
@@ -654,7 +890,9 @@ maps:
 
             File.WriteAllText(resolvedConfigPath, yaml.TrimStart());
             ConfigurationLoader loader = new ConfigurationLoader();
-            ConfigurationResolver resolver = new ConfigurationResolver();
+            ConfigurationResolver resolver = mapCatalog == null
+                ? new ConfigurationResolver()
+                : new ConfigurationResolver(mapCatalog);
             GeneratorConfig config = loader.Load(resolvedConfigPath);
             return resolver.Resolve(config, resolvedConfigPath);
         }
@@ -663,6 +901,23 @@ maps:
         {
             workspace.CreateDirectory(Path.Combine(relativePath, "Data", "Base"));
             workspace.CreateFile(Path.Combine(relativePath, "Data", "Base", "Base.wz"));
+        }
+
+        private sealed class FakeMapCatalog : IMapCatalog
+        {
+            private readonly IReadOnlyList<string> _mapIds;
+
+            public FakeMapCatalog(params string[] mapIds)
+            {
+                _mapIds = mapIds;
+            }
+
+            public IReadOnlyList<string> ListMapIds(string mapleStoryPath, Encoding encoding)
+            {
+                _ = mapleStoryPath;
+                _ = encoding;
+                return _mapIds;
+            }
         }
     }
 }
