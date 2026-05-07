@@ -8,10 +8,11 @@ namespace MapleStory.MachineLearningSampleGenerator
 {
     internal static class ConcurrentMapRunner
     {
-        public static void Run<TMap>(
-            IReadOnlyCollection<TMap> maps,
+        public static void Run<TMap, TWorker>(
+            IReadOnlyList<TMap> maps,
             int concurrency,
-            Action<TMap> runMap,
+            Func<int, TWorker> createWorker,
+            Action<TWorker, TMap> runMap,
             Action<TMap, Exception> onError)
         {
             if (maps == null)
@@ -22,6 +23,10 @@ namespace MapleStory.MachineLearningSampleGenerator
             {
                 throw new ArgumentOutOfRangeException(nameof(concurrency), concurrency, "Concurrency must be greater than 0.");
             }
+            if (createWorker == null)
+            {
+                throw new ArgumentNullException(nameof(createWorker));
+            }
             if (runMap == null)
             {
                 throw new ArgumentNullException(nameof(runMap));
@@ -31,27 +36,49 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new ArgumentNullException(nameof(onError));
             }
 
-            using SemaphoreSlim semaphore = new SemaphoreSlim(concurrency);
-            Task[] mapTasks = maps
-                .Select(map => Task.Run(() =>
+            if (maps.Count == 0)
+            {
+                return;
+            }
+
+            int workerCount = Math.Min(concurrency, maps.Count);
+            int nextMapIndex = -1;
+            Task[] workerTasks = Enumerable.Range(0, workerCount)
+                .Select(workerIndex => Task.Run(() =>
                 {
-                    semaphore.Wait();
+                    TWorker worker = createWorker(workerIndex);
                     try
                     {
-                        runMap(map);
-                    }
-                    catch (Exception ex)
-                    {
-                        onError(map, ex);
+                        while (true)
+                        {
+                            int mapIndex = Interlocked.Increment(ref nextMapIndex);
+                            if (mapIndex >= maps.Count)
+                            {
+                                break;
+                            }
+
+                            TMap map = maps[mapIndex];
+                            try
+                            {
+                                runMap(worker, map);
+                            }
+                            catch (Exception ex)
+                            {
+                                onError(map, ex);
+                            }
+                        }
                     }
                     finally
                     {
-                        semaphore.Release();
+                        if (worker is IDisposable disposable)
+                        {
+                            disposable.Dispose();
+                        }
                     }
                 }))
                 .ToArray();
 
-            Task.WaitAll(mapTasks);
+            Task.WaitAll(workerTasks);
         }
     }
 }

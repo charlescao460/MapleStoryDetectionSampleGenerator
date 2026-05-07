@@ -23,7 +23,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             ConcurrentMapRunner.Run(
                 new[] { 1, 2, 3, 4, 5, 6 },
                 2,
-                map =>
+                _ => new object(),
+                (_, map) =>
                 {
                     int current = Interlocked.Increment(ref active);
                     UpdateMax(ref maxActive, current);
@@ -46,7 +47,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             ConcurrentMapRunner.Run(
                 new[] { 1, 2, 3 },
                 2,
-                map =>
+                _ => new object(),
+                (_, map) =>
                 {
                     if (map == 2)
                     {
@@ -61,6 +63,24 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             Assert.Contains(3, processed);
             Assert.DoesNotContain(2, processed);
             Assert.Equal(new[] { 2 }, failed.ToArray());
+        }
+
+        [Fact]
+        public void Run_ReusesWorkersAcrossMaps()
+        {
+            int createdWorkers = 0;
+            ConcurrentDictionary<int, int> processedByWorker = new ConcurrentDictionary<int, int>();
+
+            ConcurrentMapRunner.Run(
+                new[] { 1, 2, 3, 4, 5 },
+                2,
+                _ => new TrackingWorker(Interlocked.Increment(ref createdWorkers)),
+                (worker, _) => processedByWorker.AddOrUpdate(worker.Id, 1, (_, count) => count + 1),
+                (_, ex) => throw new InvalidOperationException("Unexpected map error.", ex));
+
+            Assert.Equal(2, createdWorkers);
+            Assert.Equal(5, processedByWorker.Values.Sum());
+            Assert.Contains(processedByWorker.Values, count => count > 1);
         }
 
         [Fact]
@@ -114,6 +134,16 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             using FileStream stream = File.OpenRead(path);
             using JsonDocument document = JsonDocument.Parse(stream);
             return document.RootElement.GetProperty("images").EnumerateArray().Count();
+        }
+
+        private sealed class TrackingWorker
+        {
+            public TrackingWorker(int id)
+            {
+                Id = id;
+            }
+
+            public int Id { get; }
         }
     }
 }

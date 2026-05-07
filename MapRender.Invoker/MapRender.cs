@@ -19,7 +19,9 @@ namespace MapRender.Invoker
     {
         private static readonly TimeSpan ScreenShotTimeout = TimeSpan.FromSeconds(30);
         private readonly object _screenShotSync = new object();
+        private readonly object _switchMapSync = new object();
         private ScreenShotRequest _screenShotRequest;
+        private SwitchMapRequest _switchMapRequest;
 
         static MapRender()
         {
@@ -41,9 +43,12 @@ namespace MapRender.Invoker
             deviceManager.PreferredBackBufferHeight = height;
             WzComparerR2.Rendering.D2DFactory.Instance.ReleaseContext(deviceManager.GraphicsDevice);
             deviceManager.ApplyChanges();
-            this.ui.Width = width;
-            this.ui.Height = height;
-            engine.Renderer.ResetNativeSize();
+            if (this.ui != null)
+            {
+                this.ui.Width = width;
+                this.ui.Height = height;
+            }
+            engine?.Renderer.ResetNativeSize();
         }
 
         /// <summary>
@@ -82,22 +87,47 @@ namespace MapRender.Invoker
         /// Switch to a new map
         /// </summary>
         /// <param name="imgId">Wz img id</param>
-        public void SwitchToNewMap(int imgId)
+        public void SwitchToNewMap(Wz_Image img, int expectedMapId, TimeSpan? timeout = null)
         {
-            MoveToPortal(imgId, null);
-            WaitSceneLoading();
+            SwitchMapRequest request = new SwitchMapRequest(img);
+            lock (_switchMapSync)
+            {
+                if (_switchMapRequest != null)
+                {
+                    throw new InvalidOperationException("A map switch request is already pending.");
+                }
+                _switchMapRequest = request;
+            }
+
+            TimeSpan waitTimeout = timeout ?? TimeSpan.FromSeconds(60);
+            if (!request.Completion.Task.Wait(waitTimeout))
+            {
+                lock (_switchMapSync)
+                {
+                    if (ReferenceEquals(_switchMapRequest, request))
+                    {
+                        _switchMapRequest = null;
+                    }
+                }
+                request.Completion.TrySetCanceled();
+                throw new TimeoutException($"MapRender switch request did not start within {waitTimeout.TotalSeconds} seconds.");
+            }
+
+            request.Completion.Task.GetAwaiter().GetResult();
+            WaitSceneLoading(timeout, expectedMapId);
         }
 
-        public void WaitSceneLoading(TimeSpan? timeout = null)
+        public void WaitSceneLoading(TimeSpan? timeout = null, int? expectedMapId = null)
         {
             DateTime start = DateTime.UtcNow;
             SpinWait spinWait = new SpinWait();
             // Wait until new map loaded
-            while (!SceneRunning)
+            while (!SceneRunning || (expectedMapId.HasValue && mapData?.ID != expectedMapId.Value))
             {
                 if (timeout.HasValue && DateTime.UtcNow - start > timeout.Value)
                 {
-                    throw new TimeoutException($"Scene loading did not complete within {timeout.Value.TotalSeconds} seconds.");
+                    throw new TimeoutException(
+                        $"Scene loading did not complete within {timeout.Value.TotalSeconds} seconds. Expected map: {expectedMapId?.ToString() ?? "<any>"}, current map: {mapData?.ID?.ToString() ?? "<none>"}.");
                 }
                 spinWait.SpinOnce();
             }
@@ -105,6 +135,7 @@ namespace MapRender.Invoker
 
         protected override void Draw(GameTime gameTime)
         {
+            ProcessSwitchMapRequest();
             GraphicsDevice.Clear(Color.Black);
             if (mapData != null)
             {
@@ -138,6 +169,40 @@ namespace MapRender.Invoker
                         {
                             _screenShotRequest = null;
                         }
+                    }
+                }
+            }
+        }
+
+        private void ProcessSwitchMapRequest()
+        {
+            SwitchMapRequest request;
+            lock (_switchMapSync)
+            {
+                request = _switchMapRequest;
+            }
+
+            if (request == null)
+            {
+                return;
+            }
+
+            try
+            {
+                LoadMap(request.MapImage);
+                request.Completion.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                request.Completion.TrySetException(ex);
+            }
+            finally
+            {
+                lock (_switchMapSync)
+                {
+                    if (ReferenceEquals(_switchMapRequest, request))
+                    {
+                        _switchMapRequest = null;
                     }
                 }
             }
@@ -195,6 +260,19 @@ namespace MapRender.Invoker
 
             public TaskCompletionSource<ScreenShotData> Completion { get; } =
                 new TaskCompletionSource<ScreenShotData>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        private sealed class SwitchMapRequest
+        {
+            public SwitchMapRequest(Wz_Image mapImage)
+            {
+                MapImage = mapImage ?? throw new ArgumentNullException(nameof(mapImage));
+            }
+
+            public Wz_Image MapImage { get; }
+
+            public TaskCompletionSource Completion { get; } =
+                new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
     }

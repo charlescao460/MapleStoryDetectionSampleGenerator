@@ -18,8 +18,6 @@ namespace MapleStory.MachineLearningSampleGenerator
 {
     internal static class Program
     {
-        private static readonly object MapSetupSyncRoot = new object();
-
         [DllImport("kernel32.dll")]
         static extern bool SetDllDirectory(string path);
 
@@ -140,7 +138,8 @@ namespace MapleStory.MachineLearningSampleGenerator
                 ConcurrentMapRunner.Run(
                     config.Maps,
                     config.Concurrency,
-                    map => SampleMap(config, map, writer, createPostProcessors),
+                    _ => new MapSamplerWorker(config, writer, createPostProcessors),
+                    (worker, map) => worker.Sample(map),
                     (map, ex) => Console.Error.WriteLine($"Error sampling map {map.Id}: {ex}"));
                 writer.Finish();
             }
@@ -160,33 +159,6 @@ namespace MapleStory.MachineLearningSampleGenerator
             foreach (ResolvedMapConfig map in config.Maps)
             {
                 renderInvoker.LoadMap(map.Id);
-            }
-        }
-
-        private static void SampleMap(
-            ResolvedRunConfig config,
-            ResolvedMapConfig map,
-            IDatasetWriter writer,
-            Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
-        {
-            MapRenderInvoker renderInvoker = null;
-            PostProcessorPipeline postProcessors = null;
-            try
-            {
-                lock (MapSetupSyncRoot)
-                {
-                    renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
-                    renderInvoker.LoadMap(map.Id);
-                    renderInvoker.Launch(config.RenderWidth, config.RenderHeight);
-                }
-                postProcessors = createPostProcessors(map);
-                Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-                sampler.SampleAll(map.Count, writer, map.IntervalMs, postProcessors.Processors, map.Id);
-            }
-            finally
-            {
-                postProcessors?.Dispose();
-                renderInvoker?.Dispose();
             }
         }
 
@@ -254,6 +226,57 @@ namespace MapleStory.MachineLearningSampleGenerator
 
                 _owner?.Dispose();
                 _disposed = true;
+            }
+        }
+
+        private sealed class MapSamplerWorker : IDisposable
+        {
+            private readonly ResolvedRunConfig _config;
+            private readonly IDatasetWriter _writer;
+            private readonly Func<ResolvedMapConfig, PostProcessorPipeline> _createPostProcessors;
+            private MapRenderInvoker _renderInvoker;
+            private Sampler.Sampler _sampler;
+
+            public MapSamplerWorker(
+                ResolvedRunConfig config,
+                IDatasetWriter writer,
+                Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
+            {
+                _config = config;
+                _writer = writer;
+                _createPostProcessors = createPostProcessors;
+            }
+
+            public void Sample(ResolvedMapConfig map)
+            {
+                EnsureRenderer(map);
+                using PostProcessorPipeline postProcessors = _createPostProcessors(map);
+                _sampler.SampleAll(map.Count, _writer, map.IntervalMs, postProcessors.Processors, map.Id);
+            }
+
+            public void Dispose()
+            {
+                _renderInvoker?.Dispose();
+            }
+
+            private void EnsureRenderer(ResolvedMapConfig map)
+            {
+                if (_renderInvoker == null || !_renderInvoker.IsRunning)
+                {
+                    LaunchRenderer(map);
+                    return;
+                }
+
+                _renderInvoker.SwitchMap(map.Id);
+            }
+
+            private void LaunchRenderer(ResolvedMapConfig map)
+            {
+                _renderInvoker?.Dispose();
+                _renderInvoker = new MapRenderInvoker(_config.MapleStoryPath, _config.TextEncoding, false);
+                _renderInvoker.LoadMap(map.Id);
+                _renderInvoker.Launch(_config.RenderWidth, _config.RenderHeight);
+                _sampler = new Sampler.Sampler(_renderInvoker);
             }
         }
 

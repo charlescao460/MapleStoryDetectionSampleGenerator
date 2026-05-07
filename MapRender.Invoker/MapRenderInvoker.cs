@@ -156,8 +156,37 @@ namespace MapRender.Invoker
         {
             ActivateWzContext();
             ThrowIfDisposed();
-            CurrentMap = int.Parse(imgText);
-            _mapRender.SwitchToNewMap(CurrentMap);
+            ThrowIfRenderThreadFailed();
+            int mapId = int.Parse(imgText);
+            if (CurrentMap == mapId)
+            {
+                return;
+            }
+
+            string mapImgText = imgText.EndsWith(".img") ? imgText : (imgText + ".img");
+            Wz_Image nextMapImage = WzTreeSearcher.SearchForMap(_wzStructure.WzNode, mapImgText);
+            Exception ex;
+            nextMapImage.TryExtract(out ex);
+            if (ex != null)
+            {
+                throw ex;
+            }
+
+            MapRender mapRender;
+            lock (_lifetimeSync)
+            {
+                mapRender = _mapRender;
+            }
+            if (mapRender == null)
+            {
+                throw new InvalidOperationException("MapRender is not available.");
+            }
+
+            mapRender.SwitchToNewMap(nextMapImage, mapId, SceneLoadingTimeout);
+            _camera = mapRender.renderEnv.Camera;
+            _currentMapImage = nextMapImage;
+            CurrentMap = mapId;
+            ThrowIfRenderThreadFailed();
         }
 
         public void MoveCamera(int centerX, int centerY)
