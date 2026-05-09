@@ -54,7 +54,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             IReadOnlyList<PostProcessorConfig> defaultPostProcessors =
                 ResolvePostProcessors(config.PostProcessors, configDirectory, "postProcessors");
 
-            if ((config.Maps == null || config.Maps.Count == 0) && config.RandomMaps == null)
+            if ((config.Maps == null || config.Maps.Count == 0) && config.RandomMaps == null && !config.AllMaps)
             {
                 throw new ConfigurationException("maps must contain at least one entry.");
             }
@@ -76,10 +76,24 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             AppendRandomMaps(
                 generationMode,
                 config.RandomMaps,
+                config.AllMaps,
                 mapleStoryPath,
                 textEncoding,
                 defaultSampling,
                 maps);
+
+            AppendAllMaps(
+                config.AllMaps,
+                mapleStoryPath,
+                textEncoding,
+                defaultSampling,
+                defaultPostProcessors,
+                maps);
+
+            if (maps.Count == 0)
+            {
+                throw new ConfigurationException("maps did not resolve to any available map IDs.");
+            }
 
             ValidateModePostProcessors(generationMode, config, maps);
 
@@ -100,6 +114,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         private void AppendRandomMaps(
             GenerationMode generationMode,
             RandomMapConfig randomMaps,
+            bool allMaps,
             string mapleStoryPath,
             Encoding textEncoding,
             ResolvedSampling defaultSampling,
@@ -110,21 +125,17 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 return;
             }
 
+            if (allMaps)
+            {
+                throw new ConfigurationException("maps.random cannot be combined with maps.allMaps.");
+            }
+
             if (generationMode != GenerationMode.Rune)
             {
                 throw new ConfigurationException("maps.random is only supported when mode is 'rune'.");
             }
 
-            HashSet<string> existingIds = new HashSet<string>(
-                maps.Select(map => map.Id),
-                StringComparer.Ordinal);
-            List<string> candidates = _mapCatalog
-                .ListMapIds(mapleStoryPath, textEncoding)
-                .Where(id => !string.IsNullOrWhiteSpace(id) && id.All(char.IsDigit))
-                .Where(id => !existingIds.Contains(id))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(id => id, StringComparer.Ordinal)
-                .ToList();
+            List<string> candidates = ListCandidateMapIds(mapleStoryPath, textEncoding, maps);
 
             if (randomMaps.Count > candidates.Count)
             {
@@ -144,6 +155,46 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                     defaultSampling.IntervalMs,
                     Array.Empty<PostProcessorConfig>()));
             }
+        }
+
+        private void AppendAllMaps(
+            bool allMaps,
+            string mapleStoryPath,
+            Encoding textEncoding,
+            ResolvedSampling defaultSampling,
+            IReadOnlyList<PostProcessorConfig> defaultPostProcessors,
+            List<ResolvedMapConfig> maps)
+        {
+            if (!allMaps)
+            {
+                return;
+            }
+
+            foreach (string id in ListCandidateMapIds(mapleStoryPath, textEncoding, maps))
+            {
+                maps.Add(new ResolvedMapConfig(
+                    id,
+                    defaultSampling.Count,
+                    defaultSampling.IntervalMs,
+                    defaultPostProcessors));
+            }
+        }
+
+        private List<string> ListCandidateMapIds(
+            string mapleStoryPath,
+            Encoding textEncoding,
+            IEnumerable<ResolvedMapConfig> existingMaps)
+        {
+            HashSet<string> existingIds = new HashSet<string>(
+                existingMaps.Select(map => map.Id),
+                StringComparer.Ordinal);
+            return _mapCatalog
+                .ListMapIds(mapleStoryPath, textEncoding)
+                .Where(id => !string.IsNullOrWhiteSpace(id) && id.All(char.IsDigit))
+                .Where(id => !existingIds.Contains(id))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(id => id, StringComparer.Ordinal)
+                .ToList();
         }
 
         private static void Shuffle<T>(IList<T> values, Random random)

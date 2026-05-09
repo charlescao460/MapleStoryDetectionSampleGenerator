@@ -18,6 +18,8 @@ namespace MapleStory.MachineLearningSampleGenerator
 {
     internal static class Program
     {
+        private static readonly object RuneAssetCloneSync = new object();
+
         [DllImport("kernel32.dll")]
         static extern bool SetDllDirectory(string path);
 
@@ -130,11 +132,11 @@ namespace MapleStory.MachineLearningSampleGenerator
             ResolvedRunConfig config,
             Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
         {
-            ValidateMaps(config);
             IDatasetWriter writer = GetDatasetWriter(config);
             try
             {
                 Console.WriteLine("Concurrency: {0}", config.Concurrency);
+                Console.WriteLine("Maps: {0}", config.Maps.Count);
                 ConcurrentMapRunner.Run(
                     config.Maps,
                     config.Concurrency,
@@ -151,15 +153,6 @@ namespace MapleStory.MachineLearningSampleGenerator
                 }
             }
             return 0;
-        }
-
-        private static void ValidateMaps(ResolvedRunConfig config)
-        {
-            using MapRenderInvoker renderInvoker = new MapRenderInvoker(config.MapleStoryPath, config.TextEncoding, false);
-            foreach (ResolvedMapConfig map in config.Maps)
-            {
-                renderInvoker.LoadMap(map.Id);
-            }
         }
 
         private static PostProcessorPipeline CreateCharacterPostProcessorPipeline(
@@ -185,13 +178,16 @@ namespace MapleStory.MachineLearningSampleGenerator
 
         private static RuneAssetSet CloneRuneAssets(RuneAssetSet source)
         {
-            return new RuneAssetSet(
-                source.Arrows.Select(arrow => new RuneArrowAsset(
-                    arrow.Name,
-                    arrow.Direction,
-                    new Bitmap(arrow.Arrow),
-                    arrow.Bases.Select(bitmap => new Bitmap(bitmap)))),
-                source.Noises.Select(bitmap => new Bitmap(bitmap)));
+            lock (RuneAssetCloneSync)
+            {
+                return new RuneAssetSet(
+                    source.Arrows.Select(arrow => new RuneArrowAsset(
+                        arrow.Name,
+                        arrow.Direction,
+                        new Bitmap(arrow.Arrow),
+                        arrow.Bases.Select(bitmap => new Bitmap(bitmap)))),
+                    source.Noises.Select(bitmap => new Bitmap(bitmap)));
+            }
         }
 
         internal sealed class PostProcessorPipeline : IDisposable
@@ -236,6 +232,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             private readonly Func<ResolvedMapConfig, PostProcessorPipeline> _createPostProcessors;
             private MapRenderInvoker _renderInvoker;
             private Sampler.Sampler _sampler;
+            private PostProcessorPipeline _cachedPostProcessors;
 
             public MapSamplerWorker(
                 ResolvedRunConfig config,
@@ -249,14 +246,42 @@ namespace MapleStory.MachineLearningSampleGenerator
 
             public void Sample(ResolvedMapConfig map)
             {
-                EnsureRenderer(map);
-                using PostProcessorPipeline postProcessors = _createPostProcessors(map);
-                _sampler.SampleAll(map.Count, _writer, map.IntervalMs, postProcessors.Processors, map.Id);
+                try
+                {
+                    EnsureRenderer(map);
+                    if (_config.GenerationMode == GenerationMode.Rune)
+                    {
+                        PostProcessorPipeline postProcessors = GetCachedPostProcessors(map);
+                        _sampler.SampleAll(map.Count, _writer, map.IntervalMs, postProcessors.Processors, map.Id);
+                    }
+                    else
+                    {
+                        using PostProcessorPipeline postProcessors = _createPostProcessors(map);
+                        _sampler.SampleAll(map.Count, _writer, map.IntervalMs, postProcessors.Processors, map.Id);
+                    }
+                }
+                catch
+                {
+                    ResetRenderer();
+                    throw;
+                }
             }
 
             public void Dispose()
             {
-                _renderInvoker?.Dispose();
+                ResetRenderer();
+                _cachedPostProcessors?.Dispose();
+                _cachedPostProcessors = null;
+            }
+
+            private PostProcessorPipeline GetCachedPostProcessors(ResolvedMapConfig map)
+            {
+                if (_cachedPostProcessors == null)
+                {
+                    _cachedPostProcessors = _createPostProcessors(map);
+                }
+
+                return _cachedPostProcessors;
             }
 
             private void EnsureRenderer(ResolvedMapConfig map)
@@ -267,16 +292,38 @@ namespace MapleStory.MachineLearningSampleGenerator
                     return;
                 }
 
-                _renderInvoker.SwitchMap(map.Id);
+                try
+                {
+                    _renderInvoker.SwitchMap(map.Id);
+                }
+                catch (Exception ex) when (IsRecoverableRendererSwitchFailure(ex))
+                {
+                    Console.Error.WriteLine(
+                        $"Switching to map {map.Id} failed; relaunching renderer for this map. {ex.GetType().Name}: {ex.Message}");
+                    ResetRenderer();
+                    LaunchRenderer(map);
+                }
             }
 
             private void LaunchRenderer(ResolvedMapConfig map)
             {
-                _renderInvoker?.Dispose();
+                ResetRenderer();
                 _renderInvoker = new MapRenderInvoker(_config.MapleStoryPath, _config.TextEncoding, false);
                 _renderInvoker.LoadMap(map.Id);
                 _renderInvoker.Launch(_config.RenderWidth, _config.RenderHeight);
                 _sampler = new Sampler.Sampler(_renderInvoker);
+            }
+
+            private void ResetRenderer()
+            {
+                _sampler = null;
+                _renderInvoker?.Dispose();
+                _renderInvoker = null;
+            }
+
+            private static bool IsRecoverableRendererSwitchFailure(Exception exception)
+            {
+                return exception is TimeoutException || exception is InvalidOperationException;
             }
         }
 

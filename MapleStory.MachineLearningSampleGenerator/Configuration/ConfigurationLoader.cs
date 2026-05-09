@@ -54,6 +54,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                     : new List<PostProcessorConfig>(),
                 Maps = maps.Entries,
                 RandomMaps = maps.Random,
+                AllMaps = maps.AllMaps,
             };
         }
 
@@ -98,11 +99,11 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         {
             if (node is YamlSequenceNode sequence)
             {
-                return new ParsedMaps(ParseMapEntries(sequence, context), null);
+                return new ParsedMaps(ParseMapEntries(sequence, context), null, false);
             }
 
             Dictionary<string, YamlNode> maps = ToDictionary(RequireMapping(node, context), context);
-            ValidateKeys(maps, context, new[] { "entries", "random" }, Array.Empty<string>());
+            ValidateKeys(maps, context, new[] { "entries", "random", "allMaps" }, Array.Empty<string>());
 
             IList<MapConfig> entries = maps.TryGetValue("entries", out YamlNode entriesNode)
                 ? ParseMapEntries(RequireSequence(entriesNode, $"{context}.entries"), $"{context}.entries")
@@ -110,8 +111,10 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             RandomMapConfig random = maps.TryGetValue("random", out YamlNode randomNode)
                 ? ParseRandomMaps(randomNode, $"{context}.random")
                 : null;
+            bool allMaps = maps.TryGetValue("allMaps", out YamlNode allMapsNode) &&
+                ReadRequiredBool(allMapsNode, $"{context}.allMaps");
 
-            return new ParsedMaps(entries, random);
+            return new ParsedMaps(entries, random, allMaps);
         }
 
         private static IList<MapConfig> ParseMapEntries(YamlSequenceNode sequence, string context)
@@ -292,6 +295,17 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             return ParseInt(values[key], context);
         }
 
+        private static bool ReadRequiredBool(YamlNode node, string context)
+        {
+            string rawValue = ReadScalar(node, context, allowEmpty: false);
+            if (bool.TryParse(rawValue, out bool value))
+            {
+                return value;
+            }
+
+            throw new ConfigurationException($"{context} must be a boolean.");
+        }
+
         private static int? ReadOptionalInt(IDictionary<string, YamlNode> values, string key, string context)
         {
             return values.TryGetValue(key, out YamlNode node)
@@ -377,15 +391,18 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
 
         private readonly struct ParsedMaps
         {
-            public ParsedMaps(IList<MapConfig> entries, RandomMapConfig random)
+            public ParsedMaps(IList<MapConfig> entries, RandomMapConfig random, bool allMaps)
             {
                 Entries = entries;
                 Random = random;
+                AllMaps = allMaps;
             }
 
             public IList<MapConfig> Entries { get; }
 
             public RandomMapConfig Random { get; }
+
+            public bool AllMaps { get; }
         }
     }
 }

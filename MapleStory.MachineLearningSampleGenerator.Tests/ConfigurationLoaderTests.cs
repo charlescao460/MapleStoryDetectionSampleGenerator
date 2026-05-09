@@ -351,6 +351,67 @@ maps:
             Assert.Equal(3, config.Maps.Select(map => map.Id).Distinct().Count());
         }
 
+        [Fact]
+        public void LoadResolved_AllMaps_SelectsEveryCatalogMapInStableOrder()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 1
+  intervalMs: 7
+maps:
+  allMaps: true
+", mapCatalog: new FakeMapCatalog("300000000", "100000000", "200000000"));
+
+            Assert.Equal(new[] { "100000000", "200000000", "300000000" }, config.Maps.Select(map => map.Id));
+            Assert.All(config.Maps, map =>
+            {
+                Assert.Equal(1, map.Count);
+                Assert.Equal(7, map.IntervalMs);
+            });
+        }
+
+        [Fact]
+        public void LoadResolved_EntriesAndAllMaps_ExcludesExplicitIds()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 1
+maps:
+  entries:
+    - id: 200000000
+  allMaps: true
+", mapCatalog: new FakeMapCatalog("100000000", "200000000", "300000000"));
+
+            Assert.Equal(new[] { "200000000", "100000000", "300000000" }, config.Maps.Select(map => map.Id));
+            Assert.Equal(3, config.Maps.Select(map => map.Id).Distinct().Count());
+        }
+
         [Theory]
         [InlineData(0)]
         [InlineData(-1)]
@@ -400,6 +461,32 @@ sampling:
 maps:
   random:
     count: 3
+", mapCatalog: new FakeMapCatalog("100000000", "200000000")));
+        }
+
+        [Fact]
+        public void LoadResolved_RandomMapsWithAllMaps_Throws()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: rune
+mapleStoryPath: ./maple
+output:
+  format: coco
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 1
+maps:
+  allMaps: true
+  random:
+    count: 1
 ", mapCatalog: new FakeMapCatalog("100000000", "200000000")));
         }
 

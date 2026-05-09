@@ -24,6 +24,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public IList<MapConfig> Maps { get; set; } = new List<MapConfig>();
 
         public RandomMapConfig RandomMaps { get; set; }
+
+        public bool AllMaps { get; set; }
     }
 
     internal sealed class RenderConfig

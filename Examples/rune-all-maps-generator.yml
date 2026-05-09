@@ -1,0 +1,18 @@
+mode: rune
+concurrency: 16
+
+output:
+  format: coco
+  path: E:\MapleStory-ML\DATA\rune
+  name: rune-all-maps
+
+render:
+  width: 1366
+  height: 768
+
+sampling:
+  count: 1
+  intervalMs: 0
+
+maps:
+  allMaps: true
