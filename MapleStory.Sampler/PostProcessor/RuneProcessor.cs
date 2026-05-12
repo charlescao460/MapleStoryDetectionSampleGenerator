@@ -18,9 +18,16 @@ namespace MapleStory.Sampler.PostProcessor
     public sealed class RuneProcessor : IPostProcessor
     {
         private const double PromptCenterY = 0.50;
+        private const double GamePromptMinCenterY = 0.215;
+        private const double GamePromptMaxCenterY = 0.285;
+        private const double GamePromptLowerVariationProbability = 0.15;
         private const double PromptJitterX = 0.025;
-        private const double PromptJitterY = 0.045;
+        private const double PromptJitterY = 0.020;
         private const double OptionalTransformProbability = 0.50;
+        private const double Arrow7Probability = 0.70;
+        private const double Arrow8Probability = 0.10;
+        private const double Arrow9Probability = 0.10;
+        private const double ColorRemapProbability = 0.85;
         private const double MinOpacity = 0.55;
         private const double MaxOpacity = 1.00;
         private const int ColorRemapModeCount = 7;
@@ -87,12 +94,16 @@ namespace MapleStory.Sampler.PostProcessor
             sample.Height = side;
 
             PromptLayout promptLayout = CreatePromptLayout(canvas.Width);
+            DrawOptionalPromptBackgroundEffects(canvas, promptLayout);
             DrawSharedBase(canvas, promptLayout);
+            DrawOptionalInstructionOverlays(canvas, promptLayout);
 
             for (int i = 0; i < _options.ArrowCount; i++)
             {
                 DrawArrow(canvas, sample, i, promptLayout);
             }
+
+            DrawOptionalPromptForegroundEffects(canvas, promptLayout);
 
             MemoryStream output = new MemoryStream();
             canvas.Save(output, ImageFormat.Png);
@@ -102,7 +113,7 @@ namespace MapleStory.Sampler.PostProcessor
 
         private void DrawArrow(Bitmap canvas, Sample sample, int index, PromptLayout promptLayout)
         {
-            RuneArrowAsset asset = _assets.Arrows[_random.Next(0, _assets.Arrows.Count)];
+            RuneArrowAsset asset = PickRuneArrowAsset();
             using Bitmap arrow = PrepareArrowBitmap(asset.Arrow);
             TransformSpec transform = CreateArrowTransform(sample.Width, arrow.Width, arrow.Height, index, promptLayout);
             RectangleF fitBounds = promptLayout.HasBase
@@ -129,11 +140,69 @@ namespace MapleStory.Sampler.PostProcessor
             double opacity = ShouldApplyOptionalTransform()
                 ? NextDouble(MinOpacity, MaxOpacity)
                 : 1.0;
-            Bitmap remapped = _options.EnableColorRemap && ShouldApplyOptionalTransform()
+            Bitmap remapped = _options.EnableColorRemap && ShouldApplyColorRemap()
                 ? RemapColor(cropped, opacity)
                 : ApplyOpacity(cropped, opacity);
             cropped.Dispose();
             return remapped;
+        }
+
+        private RuneArrowAsset PickRuneArrowAsset()
+        {
+            double bucket = _random.NextDouble();
+            if (bucket < Arrow7Probability)
+            {
+                return PickRuneArrowAsset(IsArrow7) ?? PickAnyRuneArrowAsset();
+            }
+
+            if (bucket < Arrow7Probability + Arrow8Probability)
+            {
+                return PickRuneArrowAsset(IsArrow8) ?? PickAnyRuneArrowAsset();
+            }
+
+            if (bucket < Arrow7Probability + Arrow8Probability + Arrow9Probability)
+            {
+                return PickRuneArrowAsset(IsArrow9) ?? PickAnyRuneArrowAsset();
+            }
+
+            return PickRuneArrowAsset(asset => !IsArrow7(asset) && !IsArrow8(asset) && !IsArrow9(asset))
+                ?? PickAnyRuneArrowAsset();
+        }
+
+        private RuneArrowAsset PickRuneArrowAsset(Func<RuneArrowAsset, bool> predicate)
+        {
+            RuneArrowAsset[] candidates = _assets.Arrows
+                .Where(predicate)
+                .ToArray();
+            return candidates.Length == 0
+                ? null
+                : candidates[_random.Next(0, candidates.Length)];
+        }
+
+        private RuneArrowAsset PickAnyRuneArrowAsset()
+        {
+            return _assets.Arrows[_random.Next(0, _assets.Arrows.Count)];
+        }
+
+        private static bool IsArrow7(RuneArrowAsset asset)
+        {
+            return IsArrowFamily(asset, "arrow7");
+        }
+
+        private static bool IsArrow8(RuneArrowAsset asset)
+        {
+            return IsArrowFamily(asset, "arrow8");
+        }
+
+        private static bool IsArrow9(RuneArrowAsset asset)
+        {
+            return IsArrowFamily(asset, "arrow9");
+        }
+
+        private static bool IsArrowFamily(RuneArrowAsset asset, string family)
+        {
+            return asset.Name.Equals(family, StringComparison.OrdinalIgnoreCase)
+                || asset.Name.StartsWith(family + "/", StringComparison.OrdinalIgnoreCase);
         }
 
         private PromptLayout CreatePromptLayout(int side)
@@ -142,21 +211,40 @@ namespace MapleStory.Sampler.PostProcessor
             bool hasBase = _options.EnableBases && bases.Length > 0 && ShouldApplyOptionalOverlay();
             if (!hasBase)
             {
-                return new PromptLayout();
+                double noBaseCenterY = _options.EnableRandomTransforms
+                    ? (GamePromptMinCenterY + GamePromptMaxCenterY) / 2.0
+                    : PromptCenterY;
+                return new PromptLayout(noBaseCenterY);
             }
 
+            double centerYFactor = CreatePromptCenterYFactor();
             Bitmap source = bases[_random.Next(0, bases.Length)];
             Rectangle sourceBounds = GetAlphaBounds(source);
-            RectangleF baseBounds = CreateBaseBounds(side, sourceBounds.Size);
-            return new PromptLayout(source, sourceBounds, baseBounds);
+            RectangleF baseBounds = CreateBaseBounds(side, sourceBounds.Size, centerYFactor);
+            return new PromptLayout(source, sourceBounds, baseBounds, centerYFactor);
         }
 
-        private static RectangleF CreateBaseBounds(int side, System.Drawing.Size baseSize)
+        private double CreatePromptCenterYFactor()
+        {
+            if (!_options.EnableRandomTransforms)
+            {
+                return PromptCenterY;
+            }
+
+            if (_random.NextDouble() < GamePromptLowerVariationProbability)
+            {
+                return NextDouble(0.30, 0.43);
+            }
+
+            return NextDouble(GamePromptMinCenterY, GamePromptMaxCenterY);
+        }
+
+        private static RectangleF CreateBaseBounds(int side, System.Drawing.Size baseSize, double centerYFactor)
         {
             float width = baseSize.Width;
             float height = baseSize.Height;
             float x = (side - width) / 2f;
-            float y = (float)(side * (PromptCenterY + 0.02) - height / 2f);
+            float y = (float)(side * centerYFactor - height / 2f);
             return new RectangleF(x, y, width, height);
         }
 
@@ -177,7 +265,10 @@ namespace MapleStory.Sampler.PostProcessor
             DrawPromptBaseBar(canvas, promptLayout.BaseBounds);
 
             using Bitmap croppedBase = CropBitmap(promptLayout.BaseSource, promptLayout.BaseSourceBounds);
-            using Bitmap baseBitmap = ApplyOpacity(croppedBase, NextDouble(0.18, 0.40));
+            double sourceOpacity = _options.EnableRandomTransforms
+                ? NextDouble(0.50, 0.82)
+                : 0.35;
+            using Bitmap baseBitmap = ApplyOpacity(croppedBase, sourceOpacity);
             using Graphics graphics = Graphics.FromImage(canvas);
             graphics.CompositingMode = CompositingMode.SourceOver;
             graphics.CompositingQuality = CompositingQuality.HighQuality;
@@ -196,8 +287,191 @@ namespace MapleStory.Sampler.PostProcessor
             graphics.CompositingQuality = CompositingQuality.HighQuality;
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             using GraphicsPath path = CreateRoundedRectanglePath(bounds, radius);
-            using SolidBrush brush = new SolidBrush(Color.FromArgb(_random.Next(95, 151), 0, 0, 0));
+            using GraphicsPath shadowPath = CreateRoundedRectanglePath(
+                new RectangleF(bounds.X, bounds.Y + Math.Max(1, bounds.Height * 0.04f), bounds.Width, bounds.Height),
+                radius);
+            using SolidBrush shadowBrush = new SolidBrush(Color.FromArgb(75, 0, 0, 0));
+            graphics.FillPath(shadowBrush, shadowPath);
+
+            int fillAlpha = _options.EnableRandomTransforms ? _random.Next(120, 177) : 130;
+            Color top = Color.FromArgb(fillAlpha, 35, 92, 145);
+            Color bottom = Color.FromArgb(fillAlpha, 11, 48, 98);
+            using LinearGradientBrush brush = new LinearGradientBrush(bounds, top, bottom, LinearGradientMode.Vertical);
             graphics.FillPath(brush, path);
+
+            using Pen outerPen = new Pen(Color.FromArgb(225, 214, 178, 20), Math.Max(1.25f, bounds.Height * 0.025f));
+            graphics.DrawPath(outerPen, path);
+
+            RectangleF innerBounds = RectangleF.Inflate(bounds, -Math.Max(1.5f, bounds.Height * 0.035f), -Math.Max(1.5f, bounds.Height * 0.035f));
+            using GraphicsPath innerPath = CreateRoundedRectanglePath(innerBounds, Math.Max(1, radius - bounds.Height * 0.035f));
+            using Pen innerPen = new Pen(Color.FromArgb(60, 255, 255, 255), Math.Max(1, bounds.Height * 0.012f));
+            graphics.DrawPath(innerPen, innerPath);
+        }
+
+        private void DrawOptionalPromptBackgroundEffects(Bitmap canvas, PromptLayout promptLayout)
+        {
+            if (!_options.EnableRandomTransforms || !promptLayout.HasBase || _random.NextDouble() > 0.55)
+            {
+                return;
+            }
+
+            RectangleF bounds = promptLayout.BaseBounds;
+            RectangleF effectBounds = RectangleF.Inflate(bounds, bounds.Width * 0.22f, bounds.Height * 1.10f);
+            using Graphics graphics = Graphics.FromImage(canvas);
+            graphics.CompositingMode = CompositingMode.SourceOver;
+            graphics.CompositingQuality = CompositingQuality.HighQuality;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int hazeCount = _random.Next(2, 5);
+            for (int i = 0; i < hazeCount; i++)
+            {
+                Color color = PickPromptEffectColor(_random.Next(18, 45));
+                float width = (float)NextDouble(bounds.Width * 0.18, bounds.Width * 0.42);
+                float height = (float)NextDouble(bounds.Height * 0.30, bounds.Height * 0.85);
+                float x = (float)NextDouble(effectBounds.Left, effectBounds.Right - width);
+                float y = (float)NextDouble(effectBounds.Top, effectBounds.Bottom - height);
+                using SolidBrush brush = new SolidBrush(color);
+                graphics.FillEllipse(brush, x, y, width, height);
+            }
+
+            int streakCount = _random.Next(3, 8);
+            for (int i = 0; i < streakCount; i++)
+            {
+                using Pen pen = new Pen(PickPromptEffectColor(_random.Next(22, 60)), (float)NextDouble(1.0, 3.2));
+                float y = (float)NextDouble(effectBounds.Top, effectBounds.Bottom);
+                float x1 = (float)NextDouble(effectBounds.Left, bounds.Left + bounds.Width * 0.35f);
+                float x2 = (float)NextDouble(bounds.Left + bounds.Width * 0.65f, effectBounds.Right);
+                float offset = (float)NextDouble(-bounds.Height * 0.55, bounds.Height * 0.55);
+                graphics.DrawLine(pen, x1, y, x2, y + offset);
+            }
+        }
+
+        private void DrawOptionalInstructionOverlays(Bitmap canvas, PromptLayout promptLayout)
+        {
+            if (!_options.EnableRandomTransforms || !promptLayout.HasBase)
+            {
+                return;
+            }
+
+            if (_random.NextDouble() < 0.78)
+            {
+                DrawInstructionBanner(canvas, promptLayout.BaseBounds);
+            }
+
+            if (_random.NextDouble() < 0.32)
+            {
+                DrawRewardNotice(canvas, promptLayout.BaseBounds);
+            }
+        }
+
+        private void DrawInstructionBanner(Bitmap canvas, RectangleF baseBounds)
+        {
+            float bannerWidth = Math.Min(canvas.Width * 0.58f, baseBounds.Width * (float)NextDouble(1.34, 1.58));
+            float bannerHeight = Math.Max(22, baseBounds.Height * (float)NextDouble(0.44, 0.64));
+            float x = Clamp(baseBounds.Left + baseBounds.Width / 2f - bannerWidth / 2f, 4, canvas.Width - bannerWidth - 4);
+            float y = Math.Max(4, baseBounds.Top - bannerHeight - baseBounds.Height * (float)NextDouble(0.28, 0.52));
+            RectangleF banner = new RectangleF(x, y, bannerWidth, bannerHeight);
+
+            using Graphics graphics = Graphics.FromImage(canvas);
+            graphics.CompositingMode = CompositingMode.SourceOver;
+            graphics.CompositingQuality = CompositingQuality.HighQuality;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using GraphicsPath path = CreateRoundedRectanglePath(banner, Math.Max(6, bannerHeight * 0.16f));
+            using SolidBrush brush = new SolidBrush(Color.FromArgb(_random.Next(172, 226), 0, 0, 0));
+            graphics.FillPath(brush, path);
+
+            float fontSize = Clamp(bannerHeight * 0.34f, 8, 17);
+            using Font font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using StringFormat format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap,
+            };
+
+            using SolidBrush whiteBrush = new SolidBrush(Color.FromArgb(238, 255, 255, 255));
+            graphics.DrawString(
+                "Tap the arrow keys in the correct order to activate the rune.",
+                font,
+                whiteBrush,
+                banner,
+                format);
+
+            if (_random.NextDouble() < 0.65)
+            {
+                RectangleF overlap = new RectangleF(
+                    banner.Left + banner.Width * 0.08f,
+                    banner.Top + banner.Height * (float)NextDouble(0.32, 0.46),
+                    banner.Width * 0.84f,
+                    banner.Height * 0.48f);
+                using SolidBrush goldBrush = new SolidBrush(Color.FromArgb(205, 244, 183, 20));
+                graphics.DrawString("Enemies Near Your Level", font, goldBrush, overlap, format);
+            }
+        }
+
+        private void DrawRewardNotice(Bitmap canvas, RectangleF baseBounds)
+        {
+            float width = Math.Min(canvas.Width * 0.44f, baseBounds.Width * (float)NextDouble(0.92, 1.24));
+            float height = Math.Max(10, baseBounds.Height * (float)NextDouble(0.16, 0.24));
+            float x = Clamp(baseBounds.Left + baseBounds.Width / 2f - width / 2f, 4, canvas.Width - width - 4);
+            float y = Math.Max(2, baseBounds.Top - height * (float)NextDouble(0.10, 1.10));
+            RectangleF bounds = new RectangleF(x, y, width, height);
+
+            using Graphics graphics = Graphics.FromImage(canvas);
+            graphics.CompositingMode = CompositingMode.SourceOver;
+            graphics.CompositingQuality = CompositingQuality.HighQuality;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using Pen linePen = new Pen(Color.FromArgb(215, 220, 181, 22), Math.Max(1.2f, height * 0.14f));
+            graphics.DrawLine(linePen, bounds.Left, bounds.Top + bounds.Height / 2f, bounds.Right, bounds.Top + bounds.Height / 2f);
+
+            float fontSize = Clamp(height * 0.95f, 7, 14);
+            using Font font = new Font(FontFamily.GenericSansSerif, fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+            using StringFormat format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap,
+            };
+            using SolidBrush textBrush = new SolidBrush(Color.FromArgb(230, 255, 214, 45));
+            graphics.DrawString("Simple Colored Paper obtained", font, textBrush, bounds, format);
+        }
+
+        private void DrawOptionalPromptForegroundEffects(Bitmap canvas, PromptLayout promptLayout)
+        {
+            if (!_options.EnableRandomTransforms || !promptLayout.HasBase || _random.NextDouble() > 0.38)
+            {
+                return;
+            }
+
+            RectangleF bounds = RectangleF.Inflate(promptLayout.BaseBounds, promptLayout.BaseBounds.Width * 0.04f, promptLayout.BaseBounds.Height * 0.12f);
+            using Graphics graphics = Graphics.FromImage(canvas);
+            graphics.CompositingMode = CompositingMode.SourceOver;
+            graphics.CompositingQuality = CompositingQuality.HighQuality;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            int count = _random.Next(1, 4);
+            for (int i = 0; i < count; i++)
+            {
+                using Pen pen = new Pen(PickPromptEffectColor(_random.Next(24, 68)), (float)NextDouble(1.2, 4.0));
+                float y = (float)NextDouble(bounds.Top, bounds.Bottom);
+                float slope = (float)NextDouble(-bounds.Height * 0.45, bounds.Height * 0.45);
+                graphics.DrawLine(pen, bounds.Left, y, bounds.Right, y + slope);
+            }
+        }
+
+        private Color PickPromptEffectColor(int alpha)
+        {
+            Color[] colors =
+            {
+                Color.FromArgb(alpha, 255, 255, 255),
+                Color.FromArgb(alpha, 120, 230, 255),
+                Color.FromArgb(alpha, 255, 124, 212),
+                Color.FromArgb(alpha, 149, 110, 255),
+                Color.FromArgb(alpha, 0, 0, 0),
+            };
+            return colors[_random.Next(0, colors.Length)];
         }
 
         private void DrawOptionalNoise(Bitmap canvas, TransformSpec arrowTransform)
@@ -208,17 +482,17 @@ namespace MapleStory.Sampler.PostProcessor
             }
 
             Bitmap source = _assets.Noises[_random.Next(0, _assets.Noises.Count)];
-            using Bitmap noise = MakeGrayscale(source, NextDouble(0.12, 0.42));
-            float width = arrowTransform.Width;
-            float height = arrowTransform.Height;
+            using Bitmap noise = MakeGrayscale(source, NextDouble(0.24, 0.58));
+            float width = arrowTransform.Width * (float)NextDouble(1.10, 1.45);
+            float height = arrowTransform.Height * (float)NextDouble(1.10, 1.45);
             if (ShouldApplyOptionalTransform())
             {
-                width *= (float)NextDouble(1.00, 1.25);
+                width *= (float)NextDouble(1.00, 1.35);
             }
 
             if (ShouldApplyOptionalTransform())
             {
-                height *= (float)NextDouble(1.00, 1.25);
+                height *= (float)NextDouble(1.00, 1.35);
             }
 
             TransformSpec noiseTransform = arrowTransform.WithSize(
@@ -234,7 +508,9 @@ namespace MapleStory.Sampler.PostProcessor
         {
             double centerX;
             double centerY;
-            double targetLongSide = side * 0.058;
+            double targetLongSide = _options.EnableRandomTransforms
+                ? side * NextDouble(0.036, 0.050)
+                : side * 0.058;
 
             if (promptLayout.HasBase)
             {
@@ -246,13 +522,13 @@ namespace MapleStory.Sampler.PostProcessor
                     ? (usableLeft + usableRight) / 2.0
                     : usableLeft + slotWidth * index;
                 centerY = promptLayout.BaseBounds.Top + promptLayout.BaseBounds.Height / 2.0;
-                targetLongSide = Math.Min(targetLongSide, promptLayout.BaseBounds.Height * 0.58);
+                targetLongSide = Math.Min(targetLongSide, promptLayout.BaseBounds.Height * 0.50);
             }
             else
             {
                 double slotWidth = side / (double)(_options.ArrowCount + 1);
                 centerX = slotWidth * (index + 1);
-                centerY = side * PromptCenterY;
+                centerY = side * promptLayout.CenterYFactor;
             }
 
             if (_options.EnableRandomTransforms)
@@ -265,7 +541,7 @@ namespace MapleStory.Sampler.PostProcessor
 
                 if (ShouldApplyOptionalTransform())
                 {
-                    targetLongSide *= NextDouble(0.78, 1.18);
+                    targetLongSide *= NextDouble(0.72, 1.10);
                 }
 
                 double scale = targetLongSide / Math.Max(sourceWidth, sourceHeight);
@@ -274,8 +550,8 @@ namespace MapleStory.Sampler.PostProcessor
 
                 if (ShouldApplyOptionalTransform())
                 {
-                    width *= (float)NextDouble(0.82, 1.14);
-                    height *= (float)NextDouble(0.82, 1.14);
+                    width *= (float)NextDouble(0.76, 1.10);
+                    height *= (float)NextDouble(0.76, 1.10);
                 }
 
                 float angle = ShouldApplyOptionalTransform()
@@ -1297,6 +1573,11 @@ namespace MapleStory.Sampler.PostProcessor
             return _options.EnableRandomTransforms && _random.NextDouble() < OptionalTransformProbability;
         }
 
+        private bool ShouldApplyColorRemap()
+        {
+            return _options.EnableRandomTransforms && _random.NextDouble() < ColorRemapProbability;
+        }
+
         private bool ShouldApplyOptionalOverlay()
         {
             return !_options.EnableRandomTransforms || _random.NextDouble() < OptionalTransformProbability;
@@ -1401,11 +1682,21 @@ namespace MapleStory.Sampler.PostProcessor
 
         private readonly struct PromptLayout
         {
-            public PromptLayout(Bitmap baseSource, Rectangle baseSourceBounds, RectangleF baseBounds)
+            public PromptLayout(double centerYFactor)
+            {
+                BaseSource = null;
+                BaseSourceBounds = Rectangle.Empty;
+                BaseBounds = Rectangle.Empty;
+                CenterYFactor = centerYFactor;
+                HasBase = false;
+            }
+
+            public PromptLayout(Bitmap baseSource, Rectangle baseSourceBounds, RectangleF baseBounds, double centerYFactor)
             {
                 BaseSource = baseSource;
                 BaseSourceBounds = baseSourceBounds;
                 BaseBounds = baseBounds;
+                CenterYFactor = centerYFactor;
                 HasBase = true;
             }
 
@@ -1414,6 +1705,8 @@ namespace MapleStory.Sampler.PostProcessor
             public Rectangle BaseSourceBounds { get; }
 
             public RectangleF BaseBounds { get; }
+
+            public double CenterYFactor { get; }
 
             public bool HasBase { get; }
         }

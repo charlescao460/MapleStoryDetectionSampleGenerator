@@ -249,6 +249,35 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             Assert.Equal(100, output.Height);
         }
 
+        [Theory]
+        [InlineData(0.69, RuneArrowDirection.Left)]
+        [InlineData(0.75, RuneArrowDirection.Right)]
+        [InlineData(0.85, RuneArrowDirection.Up)]
+        [InlineData(0.95, RuneArrowDirection.Down)]
+        public void Process_WeightedAssetSelectionUsesArrow7Arrow8Arrow9ThenOthers(
+            double bucket,
+            RuneArrowDirection expectedDirection)
+        {
+            using RuneAssetSet assets = CreateWeightedAssetSet();
+            RuneProcessor processor = new RuneProcessor(
+                assets,
+                new SequenceRandom(new[] { 0 }, new[] { bucket }),
+                new RuneProcessorOptions
+                {
+                    ArrowCount = 1,
+                    EnableBases = false,
+                    EnableColorRemap = false,
+                    EnableNoise = false,
+                    EnableRandomTransforms = false,
+                });
+            Sample sample = CreateSample(100, 100);
+
+            processor.Process(sample);
+
+            TargetItem item = Assert.Single(sample.Items);
+            AssertDirection(expectedDirection, item);
+        }
+
 
         private static RuneProcessor CreateIdentityProcessor(RuneAssetSet assets, int arrowCount = 4)
         {
@@ -269,6 +298,19 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         {
             return new RuneAssetSet(
                 new[] { new RuneArrowAsset(direction.ToString(), direction, CreateArrowBitmap(Color.Red), bases) },
+                Array.Empty<Bitmap>());
+        }
+
+        private static RuneAssetSet CreateWeightedAssetSet()
+        {
+            return new RuneAssetSet(
+                new[]
+                {
+                    new RuneArrowAsset("arrow7/2", RuneArrowDirection.Left, CreateArrowBitmap(Color.Yellow)),
+                    new RuneArrowAsset("arrow8/3", RuneArrowDirection.Right, CreateArrowBitmap(Color.Red)),
+                    new RuneArrowAsset("arrow9/1", RuneArrowDirection.Up, CreateArrowBitmap(Color.Green)),
+                    new RuneArrowAsset("arrow2/0", RuneArrowDirection.Down, CreateArrowBitmap(Color.Blue)),
+                },
                 Array.Empty<Bitmap>());
         }
 
@@ -336,6 +378,33 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         private static void AssertClose(float expected, float actual)
         {
             Assert.InRange(actual, expected - 0.01f, expected + 0.01f);
+        }
+
+        private static void AssertDirection(RuneArrowDirection expectedDirection, TargetItem item)
+        {
+            TargetKeypoint start = item.Keypoints[0];
+            TargetKeypoint end = item.Keypoints[1];
+            switch (expectedDirection)
+            {
+                case RuneArrowDirection.Right:
+                    Assert.True(start.X < end.X);
+                    AssertClose(start.Y, end.Y);
+                    break;
+                case RuneArrowDirection.Left:
+                    Assert.True(start.X > end.X);
+                    AssertClose(start.Y, end.Y);
+                    break;
+                case RuneArrowDirection.Up:
+                    AssertClose(start.X, end.X);
+                    Assert.True(start.Y > end.Y);
+                    break;
+                case RuneArrowDirection.Down:
+                    AssertClose(start.X, end.X);
+                    Assert.True(start.Y < end.Y);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(expectedDirection), expectedDirection, null);
+            }
         }
 
         private sealed class FixedRandom : Random
