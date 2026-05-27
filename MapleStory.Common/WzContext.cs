@@ -268,7 +268,19 @@ namespace MapleStory.Common
                 Wz_Node searchNode = wzFileNode;
                 for (int i = 1; i < fullPath.Length && searchNode != null; i++)
                 {
-                    searchNode = searchNode.Nodes[fullPath[i]];
+                    string pathSegment = fullPath[i];
+                    if (string.IsNullOrEmpty(pathSegment))
+                    {
+                        searchNode = null;
+                        break;
+                    }
+
+                    searchNode = searchNode.Nodes[pathSegment];
+                    if (searchNode == null)
+                    {
+                        break;
+                    }
+
                     Wz_Image img = searchNode.GetValueEx<Wz_Image>(null);
                     if (img != null)
                     {
