@@ -228,6 +228,7 @@ namespace MapleStory.Avatar
         {
             bool hasExplicitBody = false;
             bool hasExplicitHead = false;
+            bool? automaticHairCover = null;
 
             foreach (int partId in appearance.PartIds)
             {
@@ -241,6 +242,11 @@ namespace MapleStory.Avatar
                 if (part == null)
                 {
                     throw new InvalidOperationException($"Avatar part {partId:D8}.img does not contain a usable info node.");
+                }
+
+                if (TryGetAutomaticHairCover(imgNode, out bool capHairCover))
+                {
+                    automaticHairCover = capHairCover;
                 }
 
                 GearType gearType = Gear.GetGearType(part.ID.Value);
@@ -265,6 +271,43 @@ namespace MapleStory.Avatar
             {
                 AddResolvedPartIfFound(canvas, canvas.Head.ID.Value % 10000);
             }
+
+            if (automaticHairCover.HasValue)
+            {
+                canvas.HairCover = automaticHairCover.Value;
+            }
+        }
+
+        internal static bool TryGetAutomaticHairCover(Wz_Node imgNode, out bool hairCover)
+        {
+            hairCover = false;
+            if (!IsCapPart(imgNode))
+            {
+                return false;
+            }
+
+            hairCover = RequiresHairCover(imgNode);
+            return true;
+        }
+
+        private static bool IsCapPart(Wz_Node imgNode)
+        {
+            return string.Equals(ReadInfoString(imgNode, "islot"), "Cp", StringComparison.Ordinal);
+        }
+
+        private static bool RequiresHairCover(Wz_Node imgNode)
+        {
+            return !string.Equals(ReadInfoString(imgNode, "vslot"), "Cp", StringComparison.Ordinal);
+        }
+
+        private static string ReadInfoString(Wz_Node imgNode, string key)
+        {
+            if (imgNode == null)
+            {
+                return null;
+            }
+
+            return imgNode.FindNodeByPath(false, "info", key).GetValueEx<string>(null);
         }
 
         private void ApplyNewPartSideEffects(
@@ -511,7 +554,11 @@ namespace MapleStory.Avatar
             canvas.WeaponType = ResolveWeaponType(canvas, pose.WeaponType);
             canvas.WeaponIndex = pose.WeaponIndex;
             canvas.EarType = pose.EarType;
-            canvas.HairCover = pose.HairCover;
+            if (pose.HasExplicitHairCover)
+            {
+                canvas.HairCover = pose.HairCover;
+            }
+
             canvas.ShowHairShade = pose.ShowHairShade;
         }
 

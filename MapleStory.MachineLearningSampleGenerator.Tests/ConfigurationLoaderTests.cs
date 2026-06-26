@@ -940,12 +940,12 @@ maps:
         }
 
         [Fact]
-        public void LoadResolved_MissingOutputPath_Throws()
+        public void LoadResolved_MissingOutputPath_Succeeds()
         {
             using TestWorkspace workspace = new TestWorkspace();
             CreateMapleStoryTree(workspace);
 
-            Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+            ResolvedRunConfig config = LoadResolved(workspace, @"
 mode: character
 mapleStoryPath: ./maple
 output:
@@ -959,7 +959,11 @@ sampling:
   count: 5
 maps:
   - id: 993134200
-"));
+");
+
+            string expectedPath = Path.Combine(workspace.RootPath, "missing-output");
+            Assert.Equal(Path.GetFullPath(expectedPath), config.OutputPath);
+            Assert.False(Directory.Exists(config.OutputPath));
         }
 
         private static ResolvedRunConfig LoadResolved(

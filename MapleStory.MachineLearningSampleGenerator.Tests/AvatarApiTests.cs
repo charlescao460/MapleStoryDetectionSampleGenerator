@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using MapleStory.Avatar;
 using MapleStory.Avatar.DebugCli;
+using WzComparerR2.WzLib;
 using Xunit;
 
 namespace MapleStory.MachineLearningSampleGenerator.Tests
@@ -27,6 +28,60 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             Assert.Equal(0, pose.EmotionFrame);
             Assert.Equal(0, pose.WeaponType);
             Assert.Equal(0, pose.WeaponIndex);
+            Assert.False(pose.HairCover);
+            Assert.False(pose.HasExplicitHairCover);
+        }
+
+        [Fact]
+        public void AvatarPose_TracksExplicitHairCoverFalse()
+        {
+            AvatarPose pose = new AvatarPose
+            {
+                HairCover = false
+            };
+
+            Assert.False(pose.HairCover);
+            Assert.True(pose.HasExplicitHairCover);
+        }
+
+        [Theory]
+        [InlineData("Cp", "Cp", true, false)]
+        [InlineData("Cp", "CpH1H5", true, true)]
+        [InlineData("Cp", null, true, true)]
+        [InlineData("cp", "CpH1H5", false, false)]
+        [InlineData(null, "CpH1H5", false, false)]
+        public void AvatarGenerator_ReadsCapHairCoverMetadata(
+            string islot,
+            string vslot,
+            bool expectedHasAutomaticHairCover,
+            bool expectedHairCover)
+        {
+            Wz_Node partNode = CreatePartNode(islot, vslot);
+
+            bool hasAutomaticHairCover = AvatarGenerator.TryGetAutomaticHairCover(partNode, out bool hairCover);
+
+            Assert.Equal(expectedHasAutomaticHairCover, hasAutomaticHairCover);
+            Assert.Equal(expectedHairCover, hairCover);
+        }
+
+        [Fact]
+        public void AvatarGenerator_LastCapMetadataWins()
+        {
+            bool? automaticHairCover = null;
+            foreach (Wz_Node partNode in new[]
+            {
+                CreatePartNode("Cp", "CpH1H5"),
+                CreatePartNode("So", "CpH1H5"),
+                CreatePartNode("Cp", "Cp")
+            })
+            {
+                if (AvatarGenerator.TryGetAutomaticHairCover(partNode, out bool hairCover))
+                {
+                    automaticHairCover = hairCover;
+                }
+            }
+
+            Assert.False(automaticHairCover);
         }
 
         [Fact]
@@ -150,6 +205,23 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
                 "--parts", "2000,12003",
                 "--all-body-frames"
             }));
+        }
+
+        private static Wz_Node CreatePartNode(string islot, string vslot)
+        {
+            Wz_Node partNode = new Wz_Node("01000000.img");
+            Wz_Node infoNode = partNode.Nodes.Add("info");
+            if (islot != null)
+            {
+                infoNode.Nodes.Add("islot").Value = islot;
+            }
+
+            if (vslot != null)
+            {
+                infoNode.Nodes.Add("vslot").Value = vslot;
+            }
+
+            return partNode;
         }
     }
 }

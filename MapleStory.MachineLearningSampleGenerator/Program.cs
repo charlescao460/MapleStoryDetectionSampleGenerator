@@ -329,6 +329,8 @@ namespace MapleStory.MachineLearningSampleGenerator
 
         private static IDatasetWriter GetDatasetWriter(ResolvedRunConfig config)
         {
+            EnsureTargetDirectoryIsEmptyOrCreate(config.OutputPath);
+
             switch (config.OutputFormat)
             {
                 case OutputFormat.TfRecord:
@@ -339,6 +341,21 @@ namespace MapleStory.MachineLearningSampleGenerator
                     return new CocoWriter(config.OutputPath, config.OutputName);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(config), config, null);
+            }
+        }
+
+        internal static void EnsureTargetDirectoryIsEmptyOrCreate(string targetDirectory)
+        {
+            if (!Directory.Exists(targetDirectory))
+            {
+                Directory.CreateDirectory(targetDirectory);
+                return;
+            }
+
+            if (Directory.EnumerateFileSystemEntries(targetDirectory).Any())
+            {
+                throw new InvalidOperationException(
+                    $"Output path '{targetDirectory}' already exists and is not empty. Choose an empty or new output path to avoid overwriting an existing dataset.");
             }
         }
 

@@ -36,7 +36,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             Encoding textEncoding = ResolveEncoding(config.Encoding);
             OutputFormat outputFormat = ResolveOutputFormat(config.Output?.Format);
             ValidateModeOutput(generationMode, outputFormat);
-            string outputPath = ResolveExistingDirectory(config.Output?.Path, configDirectory, "output.path");
+            string outputPath = ResolveDirectoryPath(config.Output?.Path, configDirectory, "output.path");
             string outputName = RequireNonEmpty(config.Output?.Name, "output.name");
             int renderWidth = config.Render?.Width ?? 0;
             int renderHeight = config.Render?.Height ?? 0;
@@ -477,14 +477,9 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             return resolvedId;
         }
 
-        private static string ResolveExistingDirectory(string path, string configDirectory, string context)
+        private static string ResolveDirectoryPath(string path, string configDirectory, string context)
         {
-            string resolvedPath = ResolvePath(configDirectory, RequireNonEmpty(path, context));
-            if (!Directory.Exists(resolvedPath))
-            {
-                throw new ConfigurationException($"{context} '{resolvedPath}' does not exist.");
-            }
-            return resolvedPath;
+            return ResolvePath(configDirectory, RequireNonEmpty(path, context));
         }
 
         private static string ResolvePath(string configDirectory, string path)
