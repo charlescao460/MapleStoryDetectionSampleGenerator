@@ -10,7 +10,7 @@ render:
   height: 768
 
 sampling:
-  count: 1000
+  count: 10
   intervalMs: 0
 
 postProcessors:
@@ -19,12 +19,12 @@ postProcessors:
     actions: [stand1, walk1, jump]
     emotions: [default]
     avatars:
-      - parts: [2000, 12003, 20000, 30000, 1040036, 1060026]
-      - parts: [2000, 12003, 20000, 30000, 1040036, 1060026, 1703598]
+      - parts: [2000, 12003, 26054, 67055, 1001158, 1051805, 1071193, 1703436]
+      # - parts: [2000, 12003, ... ]
 
 maps:
   - id: 993134200
   - id: 450007010
     sampling:
-      count: 2000
+      count: 5
     postProcessors: []

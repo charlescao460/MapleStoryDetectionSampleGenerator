@@ -1,5 +1,5 @@
 mode: rune
-concurrency: 16
+concurrency: 32
 
 output:
   format: coco
@@ -11,7 +11,7 @@ render:
   height: 768
 
 sampling:
-  count: 1
+  count: 4
   intervalMs: 0
 
 maps:
