@@ -1,16 +1,16 @@
 # MapleStoryDetectionSampleGenerator
 Generate Machine Learning Samples Object Detection In MapleStory
-![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/pictures/result.png)
+![](./pictures/result.png)
 
 
 
 # Performance
 This generator can generate arbitrarily many annotated samples. All bounding boxes are precisely annotated based on rendering coordinates.
 
-With [YOLOv4](https://github.com/AlexeyAB/darknet/blob/master/cfg/yolov4-custom.cfg) and ~5000 samples, it can achieve 99.8%mAP in test set.
+With [RTMDet](https://arxiv.org/abs/2212.07784) and ~10000 samples, it can achieve 97.3%mAP in test set.
 
 
-![](https://github.com/charlescao460/MapleStoryDetectionSampleGenerator/blob/main/pictures/chart_yolov4-custom.png)
+![](./pictures/chart_model_map.png)
 
 # Requirement
 * .NET 10.0 SDK (10.0.0 or above)
@@ -99,25 +99,6 @@ maps:
   random:
     count: 50
     seed: 12345
-```
-
-All-map rune example:
-
-```yaml
-mode: rune
-concurrency: 16
-output:
-  format: coco
-  path: E:\MapleStory-ML\DATA\rune
-  name: rune-all-maps
-render:
-  width: 1366
-  height: 768
-sampling:
-  count: 1
-  intervalMs: 0
-maps:
-  allMaps: true
 ```
 
 # Note

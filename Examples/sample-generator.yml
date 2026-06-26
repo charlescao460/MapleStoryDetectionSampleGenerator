@@ -2,7 +2,7 @@ mode: character
 
 output:
   format: coco
-  path: .
+  path: ./sample_output
   name: sample-generator
 
 render:
