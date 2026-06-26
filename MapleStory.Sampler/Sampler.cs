@@ -4,12 +4,9 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using MapRender.Invoker;
-using SharpDX.MediaFoundation;
+using MapleStory.Sampler.PostProcessor;
 using Encoder = System.Drawing.Imaging.Encoder;
 
 namespace MapleStory.Sampler
@@ -19,10 +16,7 @@ namespace MapleStory.Sampler
         private const long JPEG_RATIO = 90L;
         private const double ITEM_PARTIAL_AREA_THRESHOLD = 0.70;
         private readonly MapRenderInvoker _renderInvoker;
-
-        public delegate void SamplePostProcessor(Sample sample, EventArgs e);
-
-        public event SamplePostProcessor OnSampleCaptured;
+        private readonly Random _random = new Random();
 
         public Sampler(MapRenderInvoker renderInvoker)
         {
@@ -33,92 +27,109 @@ namespace MapleStory.Sampler
             }
         }
 
-        public Task<Sample> SampleSingleAsync()
+        public Sample SampleSingle(IReadOnlyList<IPostProcessor> postProcessors = null)
         {
             MemoryStream stream = new MemoryStream();
             var screenShotData = _renderInvoker.TakeScreenShot(stream);
             var items = FilterTargetsInCamera(screenShotData);
             int width = screenShotData.CameraRectangle.Width;
             int height = screenShotData.CameraRectangle.Height;
-            return Task.Run(() =>
+            Sample ret = new Sample(stream, items, width, height);
+            if (postProcessors != null)
             {
-                Sample ret = new Sample(stream, items, width, height);
-                OnSampleCaptured?.Invoke(ret, null);
-                ret.ImageStream = EncodeScreenShot(ret.ImageStream);
-                return ret;
-            });
+                foreach (var postProcessor in postProcessors)
+                {
+                    postProcessor.Process(ret);
+                }
+            }
+            ret.ImageStream = EncodeScreenShot(ret.ImageStream, ret.Width, ret.Height);
+            return ret;
         }
 
         /// <summary>
-        /// Sample all based on provided step
+        /// Randomly sample the map by uniformly choosing camera centers in the valid map camera range.
         /// </summary>
-        /// <param name="xStep">step in X to sample</param>
-        /// <param name="yStep">step in Y to sample</param>
+        /// <param name="sampleCount">Number of samples to generate.</param>
         /// <param name="writer">Writer to save result</param>
         /// <param name="interval">Sampling time interval, in ms.</param>
-        public void SampleAll(int xStep, int yStep, IDatasetWriter writer, int interval = 0)
+        /// <param name="postProcessors">Optional post-processing pipeline applied in order before encoding.</param>
+        public void SampleAll(int sampleCount, IDatasetWriter writer, int interval = 0,
+            IReadOnlyList<IPostProcessor> postProcessors = null, string mapId = null)
         {
-            xStep = Math.Abs(xStep);
-            yStep = Math.Abs(yStep);
-            int initX = _renderInvoker.WorldOriginX + _renderInvoker.ScreenWidth / 2;
-            int initY = _renderInvoker.WorldOriginY + _renderInvoker.ScreenHeight / 2;
-            int endX = _renderInvoker.WorldOriginX + _renderInvoker.WorldWidth - _renderInvoker.ScreenWidth / 2;
-            int endY = _renderInvoker.WorldOriginY + _renderInvoker.WorldHeight - _renderInvoker.ScreenHeight / 2;
-
-            int count = 0;
-            int total = (int)(Math.Round((double)(endX - initX) / xStep, MidpointRounding.ToPositiveInfinity) *
-                         Math.Round((double)(endY - initY) / yStep, MidpointRounding.ToPositiveInfinity));
-            HashSet<Task> writingTasks = new HashSet<Task>();
-            Queue<Task> completedTasks = new Queue<Task>();
-
-            for (int x = initX; x < endX; x += xStep)
+            if (sampleCount <= 0)
             {
-                for (int y = initY; y < endY; y += yStep)
+                throw new ArgumentOutOfRangeException(nameof(sampleCount), "Sample count must be greater than 0.");
+            }
+
+            (int minX, int maxX) = GetCameraCenterRange(
+                _renderInvoker.WorldOriginX,
+                _renderInvoker.WorldWidth,
+                _renderInvoker.ScreenWidth);
+            (int minY, int maxY) = GetCameraCenterRange(
+                _renderInvoker.WorldOriginY,
+                _renderInvoker.WorldHeight,
+                _renderInvoker.ScreenHeight);
+
+            for (int i = 0; i < sampleCount; i++)
+            {
+                int x = NextInclusive(minX, maxX);
+                int y = NextInclusive(minY, maxY);
+                try
                 {
-                    Console.WriteLine($"Sampling at center x={x},y={y}....");
-                    // Move Camera
+                    Console.WriteLine($"Sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at random center x={x},y={y}....");
                     _renderInvoker.MoveCamera(x, y);
-                    // Do sample
-                    writingTasks.Add(SampleSingleAsync().ContinueWith(s =>
+                    Sample sample = SampleSingle(postProcessors);
+                    writer.Write(sample);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"Error sampling map {mapId ?? _renderInvoker.CurrentMap.ToString()} at center x={x},y={y}: {ex}");
+                    if (!_renderInvoker.IsRunning)
                     {
-                        lock (writer)
-                        {
-                            writer.Write(s.Result);
-                        }
-                    }));
-                    // Check pending tasks
-                    foreach (var task in writingTasks)
-                    {
-                        if (task.Exception != null)
-                        {
-                            throw task.Exception;
-                        }
-                        if (task.IsCompleted)
-                        {
-                            count++;
-                            completedTasks.Enqueue(task);
-                            Console.WriteLine($"Progress: {count}/{total}, {(double)count / total * 100}%\n");
-                        }
+                        Console.Error.WriteLine(
+                            $"Stopping map {mapId ?? _renderInvoker.CurrentMap.ToString()} because its render thread is no longer running.");
+                        return;
                     }
-                    foreach (var task in completedTasks)
-                    {
-                        writingTasks.Remove(task);
-                    }
+                }
+                finally
+                {
+                    int completed = i + 1;
+                    Console.WriteLine($"Progress: {completed}/{sampleCount}, {(double)completed / sampleCount * 100}%\n");
                     Thread.Sleep(interval);
                 }
             }
-            foreach (var task in writingTasks)
-            {
-                task.GetAwaiter().GetResult();
-            }
-            Console.WriteLine("############## All Samples Captured ##############");
+            Console.WriteLine($"############## All Samples Captured for map {mapId ?? _renderInvoker.CurrentMap.ToString()} ##############");
             return;
         }
 
-        private MemoryStream EncodeScreenShot(Stream screenShotStream)
+        private static (int Min, int Max) GetCameraCenterRange(int worldOrigin, int worldSize, int screenSize)
+        {
+            int min = worldOrigin + screenSize / 2;
+            int max = worldOrigin + worldSize - screenSize / 2;
+            if (max >= min)
+            {
+                return (min, max);
+            }
+
+            int center = worldOrigin + worldSize / 2;
+            return (center, center);
+        }
+
+        private int NextInclusive(int minValue, int maxValue)
+        {
+            if (maxValue <= minValue)
+            {
+                return minValue;
+            }
+
+            return _random.Next(minValue, maxValue + 1);
+        }
+
+        private MemoryStream EncodeScreenShot(Stream screenShotStream, int width, int height)
         {
             using Bitmap source = new Bitmap(screenShotStream);
-            using Bitmap result = new Bitmap(_renderInvoker.ScreenWidth, _renderInvoker.ScreenHeight);
+            using Bitmap result = new Bitmap(width, height);
             Rectangle rectangle = new Rectangle(Point.Empty, source.Size);
             using (Graphics graphics = Graphics.FromImage(result))
             {
@@ -155,9 +166,13 @@ namespace MapleStory.Sampler
                 {
                     throw new InvalidDataException("Items Height or Width is negative!!");
                 }
+                if (i.Height == 0 || i.Width == 0)
+                {
+                    return;
+                }
 
                 // Not show in screenshots at all
-                if (i.X > imgWidth || i.Y > imgHeight)
+                if (i.X >= imgWidth || i.Y >= imgHeight)
                 {
                     return;
                 }
@@ -199,7 +214,12 @@ namespace MapleStory.Sampler
                     inCameraHeight = imgHeight - i.Y;
                 }
 
-                double inCameraArea = inCameraHeight * imgWidth;
+                if (inCameraWidth <= 0 || inCameraHeight <= 0)
+                {
+                    return;
+                }
+
+                double inCameraArea = inCameraHeight * inCameraWidth;
                 if (inCameraArea / itemArea >= ITEM_PARTIAL_AREA_THRESHOLD)
                 {
                     i.Width = inCameraWidth;

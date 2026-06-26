@@ -1,0 +1,30 @@
+mode: character
+
+output:
+  format: coco
+  path: ./sample_output
+  name: sample-generator
+
+render:
+  width: 1366
+  height: 768
+
+sampling:
+  count: 10
+  intervalMs: 0
+
+postProcessors:
+  - type: player
+    count: 3
+    actions: [stand1, walk1, jump]
+    emotions: [default]
+    avatars:
+      - parts: [2000, 12003, 26054, 67055, 1001158, 1051805, 1071193, 1703436]
+      # - parts: [2000, 12003, ... ]
+
+maps:
+  - id: 993134200
+  - id: 450007010
+    sampling:
+      count: 5
+    postProcessors: []

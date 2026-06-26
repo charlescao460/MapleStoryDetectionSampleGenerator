@@ -12,6 +12,7 @@ namespace MapleStory.Sampler
     {
         public const string TfRecordNameExtension = ".tfrecord";
         private const int BufferSize = 5120;
+        private readonly object _sync = new object();
         private FileStream _fileStream;
 
         /// <summary>
@@ -53,34 +54,37 @@ namespace MapleStory.Sampler
         /// <param name="stream">Stream containing record in binary form</param>
         public void Write(Stream stream)
         {
-            ulong length = (ulong)stream.Length;
-            uint crcLength = Crc32CAlgorithm.Compute(BitConverter.GetBytes(length));
-            uint maskLength = MaskCrc32(crcLength);
-            _fileStream.Write(BitConverter.GetBytes(length), 0, 8); // uint64 length
-            _fileStream.Write(BitConverter.GetBytes(maskLength), 0, 4); // uint32 masked_crc32_of_length
-            stream.Seek(0, SeekOrigin.Begin); // Read from head
-
-            byte[] buffer = new byte[BufferSize];
-            int count = 0;
-            int readSize = stream.Read(buffer, 0, buffer.Length);
-            uint crcData = Crc32CAlgorithm.Compute(buffer, 0, readSize);
-            for (bool firstRun = true; readSize > 0;
-                count += readSize, readSize = stream.Read(buffer, 0, buffer.Length), firstRun = false)
+            lock (_sync)
             {
-                if (!firstRun)
+                ulong length = (ulong)stream.Length;
+                uint crcLength = Crc32CAlgorithm.Compute(BitConverter.GetBytes(length));
+                uint maskLength = MaskCrc32(crcLength);
+                _fileStream.Write(BitConverter.GetBytes(length), 0, 8); // uint64 length
+                _fileStream.Write(BitConverter.GetBytes(maskLength), 0, 4); // uint32 masked_crc32_of_length
+                stream.Seek(0, SeekOrigin.Begin); // Read from head
+
+                byte[] buffer = new byte[BufferSize];
+                int count = 0;
+                int readSize = stream.Read(buffer, 0, buffer.Length);
+                uint crcData = Crc32CAlgorithm.Compute(buffer, 0, readSize);
+                for (bool firstRun = true; readSize > 0;
+                    count += readSize, readSize = stream.Read(buffer, 0, buffer.Length), firstRun = false)
                 {
-                    crcData = Crc32CAlgorithm.Append(crcData, buffer, 0, readSize);
+                    if (!firstRun)
+                    {
+                        crcData = Crc32CAlgorithm.Append(crcData, buffer, 0, readSize);
+                    }
+                    _fileStream.Write(buffer, 0, readSize); // byte data[length]
                 }
-                _fileStream.Write(buffer, 0, readSize); // byte data[length]
-            }
 
-            if (count != (int)length)
-            {
-                throw new Exception("Stream length does not equal to read length.");
-            }
+                if (count != (int)length)
+                {
+                    throw new Exception("Stream length does not equal to read length.");
+                }
 
-            uint maskCrcData = MaskCrc32(crcData);
-            _fileStream.Write(BitConverter.GetBytes(maskCrcData), 0, 4); // uint32 masked_crc32_of_data
+                uint maskCrcData = MaskCrc32(crcData);
+                _fileStream.Write(BitConverter.GetBytes(maskCrcData), 0, 4); // uint32 masked_crc32_of_data
+            }
         }
 
         /// <summary>
@@ -94,12 +98,18 @@ namespace MapleStory.Sampler
         public void Finish()
         {
             // Not needed for TfRecord.
-            return;
+            lock (_sync)
+            {
+                return;
+            }
         }
 
         public void Dispose()
         {
-            _fileStream?.Dispose();
+            lock (_sync)
+            {
+                _fileStream?.Dispose();
+            }
         }
 
     }

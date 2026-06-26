@@ -24,6 +24,8 @@ namespace MapRender.Invoker
 
         public int Height { get; set; }
 
+        public IList<TargetKeypoint> Keypoints { get; set; } = new List<TargetKeypoint>();
+
         public TargetItem() { }
 
         public TargetItem(SceneItem item)
@@ -64,5 +66,25 @@ namespace MapRender.Invoker
             return ObjectClass.Unknown;
         }
 
+    }
+
+    public class TargetKeypoint
+    {
+        public float X { get; set; }
+
+        public float Y { get; set; }
+
+        public int Visibility { get; set; } = 2;
+
+        public TargetKeypoint()
+        {
+        }
+
+        public TargetKeypoint(float x, float y, int visibility = 2)
+        {
+            X = x;
+            Y = y;
+            Visibility = visibility;
+        }
     }
 }

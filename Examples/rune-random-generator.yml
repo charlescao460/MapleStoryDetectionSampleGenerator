@@ -1,0 +1,21 @@
+mode: rune
+
+output:
+  format: coco
+  path: .
+  name: rune-random-generator
+
+render:
+  width: 1366
+  height: 768
+
+sampling:
+  count: 1000
+  intervalMs: 0
+
+maps:
+  entries:
+    - id: 410013660
+  random:
+    count: 50
+    seed: 12345

@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using MapleStory.Common;
 using Microsoft.Xna.Framework;
 using WzComparerR2.Common;
@@ -18,12 +16,17 @@ namespace MapRender.Invoker
 {
     public class MapRenderInvoker : MapRenderInvokerBase
     {
+        private static readonly object RenderInitializationSyncRoot = new object();
+        private static readonly TimeSpan SceneLoadingTimeout = TimeSpan.FromSeconds(60);
+        private readonly object _lifetimeSync = new object();
         private Wz_Image _currentMapImage;
         private StringLinker _stringLinker;
         private Thread _renderThread;
         private MapRender _mapRender;
         private Camera _camera;
+        private Exception _renderThreadException;
         private volatile bool _isRunning;
+        private bool _disposed;
 
         public bool IsRunning => _isRunning;
 
@@ -49,31 +52,18 @@ namespace MapRender.Invoker
             : base(mapleStoryPath, encoding, disableImgCheck)
         {
             _isRunning = false;
-            AddFindWzEventHandler();
-        }
-
-        /// <summary>
-        /// Attach event handler to PlugManager, let it throw if reflection fail so we know there are changes in WzComparerR2
-        /// </summary>
-        /// <seealso cref="WzComparerR2.PluginBase.PluginManager.WzFileFinding"/>
-        private void AddFindWzEventHandler()
-        {
-            EventInfo findWzEvent = typeof(PluginManager)
-                .GetEvent("WzFileFinding", BindingFlags.Static | BindingFlags.NonPublic);
-            MethodInfo findWzHandler =
-                typeof(MapRenderInvoker).GetMethod("CharaSimLoader_WzFileFinding", BindingFlags.NonPublic | BindingFlags.Instance);
-            Delegate findWzDelegate = Delegate.CreateDelegate(findWzEvent.EventHandlerType, this, findWzHandler);
-            findWzEvent.AddMethod.Invoke(this, new[] { findWzDelegate });
         }
 
         ~MapRenderInvoker()
         {
-            _renderThread?.Abort();
+            Dispose(false);
         }
 
         ///<inheritdoc/>
         public override void LoadMap(string imgText)
         {
+            ActivateWzContext();
+            ThrowIfDisposed();
             CurrentMap = int.Parse(imgText);
             imgText = imgText.EndsWith(".img") ? imgText : (imgText + ".img");
             _currentMapImage = WzTreeSearcher.SearchForMap(_wzStructure.WzNode, imgText);
@@ -90,167 +80,209 @@ namespace MapRender.Invoker
         /// <inheritdoc/>
         public override void Launch(int width, int height)
         {
+            ActivateWzContext();
+            ThrowIfDisposed();
             if (_currentMapImage == null)
             {
                 throw new InvalidOperationException("MapRenderInvoker.LoadMap() must be called before Launch().");
             }
 
             _isRunning = false;
+            _renderThreadException = null;
+            ManualResetEventSlim initialized = new ManualResetEventSlim(false);
             _renderThread = new Thread(() =>
             {
-                _mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
-                _mapRender.Window.Title = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileName;
                 try
                 {
-                    using (_mapRender)
+                    ActivateWzContext();
+                    MapRender mapRender = new MapRender(_currentMapImage) { StringLinker = _stringLinker };
+                    mapRender.Window.Title = FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileName;
+                    lock (_lifetimeSync)
                     {
-                        _mapRender.RunOneFrame(); // Initialize
-                        _mapRender.ChangeResolution(width, height);
-                        _camera = _mapRender.renderEnv.Camera;
-                        _mapRender.Run();
+                        _mapRender = mapRender;
                     }
+                    using (mapRender)
+                    {
+                        mapRender.RunOneFrame(); // Initialize
+                        mapRender.ChangeResolution(width, height);
+                        initialized.Set();
+                        mapRender.Run();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _renderThreadException = ex;
+                    initialized.Set();
                 }
                 finally
                 {
-                    _mapRender = null;
+                    lock (_lifetimeSync)
+                    {
+                        _mapRender = null;
+                        _camera = null;
+                    }
+                    _isRunning = false;
                 }
             });
             ScreenHeight = height;
             ScreenWidth = width;
             _renderThread.SetApartmentState(ApartmentState.STA);
             _renderThread.IsBackground = true;
-            _renderThread.Start();
-            SpinWait spinWait = new SpinWait();
-            while (_mapRender == null)
+            lock (RenderInitializationSyncRoot)
             {
-                spinWait.SpinOnce();
+                _renderThread.Start();
+                initialized.Wait();
+                initialized.Dispose();
+                if (_renderThreadException != null)
+                {
+                    throw new InvalidOperationException("MapRender launch failed.", _renderThreadException);
+                }
+                MapRender mapRender;
+                lock (_lifetimeSync)
+                {
+                    mapRender = _mapRender;
+                }
+                if (mapRender == null)
+                {
+                    throw new InvalidOperationException("MapRender launch failed before initialization completed.");
+                }
+                mapRender.WaitSceneLoading(SceneLoadingTimeout);
+                _camera = mapRender.renderEnv.Camera;
+                _isRunning = true;
             }
-            _mapRender.WaitSceneLoading();
-            _isRunning = true;
         }
 
         public override void SwitchMap(string imgText)
         {
-            CurrentMap = int.Parse(imgText);
-            _mapRender.SwitchToNewMap(CurrentMap);
+            ActivateWzContext();
+            ThrowIfDisposed();
+            ThrowIfRenderThreadFailed();
+            int mapId = int.Parse(imgText);
+            if (CurrentMap == mapId)
+            {
+                return;
+            }
+
+            string mapImgText = imgText.EndsWith(".img") ? imgText : (imgText + ".img");
+            Wz_Image nextMapImage = WzTreeSearcher.SearchForMap(_wzStructure.WzNode, mapImgText);
+            Exception ex;
+            nextMapImage.TryExtract(out ex);
+            if (ex != null)
+            {
+                throw ex;
+            }
+
+            MapRender mapRender;
+            lock (_lifetimeSync)
+            {
+                mapRender = _mapRender;
+            }
+            if (mapRender == null)
+            {
+                throw new InvalidOperationException("MapRender is not available.");
+            }
+
+            mapRender.SwitchToNewMap(nextMapImage, mapId, SceneLoadingTimeout);
+            _camera = mapRender.renderEnv.Camera;
+            _currentMapImage = nextMapImage;
+            CurrentMap = mapId;
+            ThrowIfRenderThreadFailed();
         }
 
         public void MoveCamera(int centerX, int centerY)
         {
+            ThrowIfDisposed();
+            ThrowIfRenderThreadFailed();
             _camera.Center = new Vector2(centerX, centerY);
             _camera.AdjustToWorldRect();
         }
 
         public ScreenShotData TakeScreenShot(Stream stream)
         {
-            return _mapRender.TakeScreenShot(stream);
+            ThrowIfDisposed();
+            ThrowIfRenderThreadFailed();
+            MapRender mapRender;
+            lock (_lifetimeSync)
+            {
+                mapRender = _mapRender;
+            }
+            if (mapRender == null)
+            {
+                throw new InvalidOperationException("MapRender is not available.");
+            }
+            ScreenShotData screenShotData = mapRender.TakeScreenShot(stream);
+            ThrowIfRenderThreadFailed();
+            return screenShotData;
         }
 
-        #region COPIED_CODE
-
-        /// <summary>
-        /// !!!!!!!!!!!!COPIED CODE!!!!!!!!!!!!!!
-        /// Version: git@github.com:Kagamia/WzComparerR2.git:f6ecfb18cae661f125a189e527feea1964f5bda8
-        /// </summary>
-        /// <see cref="WzComparerR2.MainForm.CharaSimLoader_WzFileFinding"/>
-        private void CharaSimLoader_WzFileFinding(object sender, WzComparerR2.FindWzEventArgs e)
+        public override void Dispose()
         {
-            string[] fullPath = null;
-            if (!string.IsNullOrEmpty(e.FullPath)) //用fullpath作为输入参数
-            {
-                fullPath = e.FullPath.Split('/', '\\');
-                try
-                {
-                    e.WzType = (Wz_Type)Enum.Parse(typeof(Wz_Type), fullPath[0], true);
-                }
-                catch
-                {
-                    e.WzType = Wz_Type.Unknown;
-                }
-            }
-
-            List<Wz_Node> preSearch = new List<Wz_Node>();
-            if (e.WzType != Wz_Type.Unknown) //用wztype作为输入参数
-            {
-                IEnumerable<Wz_Structure> preSearchWz = e.WzFile?.WzStructure != null ?
-                    Enumerable.Repeat(e.WzFile.WzStructure, 1) : new List<Wz_Structure>() { _wzStructure };
-                foreach (var wzs in preSearchWz)
-                {
-                    Wz_File baseWz = null;
-                    bool find = false;
-                    foreach (Wz_File wz_f in wzs.wz_files)
-                    {
-                        if (wz_f.Type == e.WzType)
-                        {
-                            preSearch.Add(wz_f.Node);
-                            find = true;
-                            //e.WzFile = wz_f;
-                        }
-                        if (wz_f.Type == Wz_Type.Base)
-                        {
-                            baseWz = wz_f;
-                        }
-                    }
-
-                    // detect data.wz
-                    if (baseWz != null && !find)
-                    {
-                        string key = e.WzType.ToString();
-                        foreach (Wz_Node node in baseWz.Node.Nodes)
-                        {
-                            if (node.Text == key && node.Nodes.Count > 0)
-                            {
-                                preSearch.Add(node);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (fullPath == null || fullPath.Length <= 1)
-            {
-                if (e.WzType != Wz_Type.Unknown && preSearch.Count > 0) //返回wzFile
-                {
-                    e.WzNode = preSearch[0];
-                    e.WzFile = preSearch[0].Value as Wz_File;
-                }
-                return;
-            }
-
-            if (preSearch.Count <= 0)
-            {
-                return;
-            }
-
-            foreach (var wzFileNode in preSearch)
-            {
-                var searchNode = wzFileNode;
-                for (int i = 1; i < fullPath.Length && searchNode != null; i++)
-                {
-                    searchNode = searchNode.Nodes[fullPath[i]];
-                    var img = searchNode.GetValueEx<Wz_Image>(null);
-                    if (img != null)
-                    {
-                        searchNode = img.TryExtract() ? img.Node : null;
-                    }
-                }
-
-                if (searchNode != null)
-                {
-                    e.WzNode = searchNode;
-                    e.WzFile = wzFileNode.Value as Wz_File;
-                    return;
-                }
-            }
-            //寻找失败
-            e.WzNode = null;
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
-        #endregion
+
+        protected override void Dispose(bool disposing)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            MapRender mapRender;
+            Thread renderThread;
+            lock (_lifetimeSync)
+            {
+                mapRender = _mapRender;
+                renderThread = _renderThread;
+            }
+
+            try
+            {
+                lock (RenderInitializationSyncRoot)
+                {
+                    mapRender?.Exit();
+                    if (disposing && renderThread != null && renderThread.IsAlive)
+                    {
+                        renderThread.Join(TimeSpan.FromSeconds(10));
+                    }
+                }
+            }
+            finally
+            {
+                if (disposing)
+                {
+                    base.Dispose(disposing);
+                }
+                _disposed = true;
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(MapRenderInvoker));
+            }
+        }
+
+        private void ThrowIfRenderThreadFailed()
+        {
+            if (_renderThreadException != null)
+            {
+                throw new InvalidOperationException("MapRender render thread failed.", _renderThreadException);
+            }
+            if (!_isRunning)
+            {
+                throw new InvalidOperationException("MapRender is not running.");
+            }
+        }
+
     }
 
-    public abstract class MapRenderInvokerBase
+    public abstract class MapRenderInvokerBase : IDisposable
     {
-
+        private readonly WzContext _wzContext;
+        private bool _disposed;
         protected readonly Wz_Structure _wzStructure;
 
         /// <summary>
@@ -263,41 +295,33 @@ namespace MapRender.Invoker
         /// <exception cref="ArgumentException"></exception>
         protected MapRenderInvokerBase(string mapleStoryPath, Encoding encoding, bool disableImgCheck = false)
         {
-            // Static settings for Wz_Structure :(
-            Wz_Structure.DefaultAutoDetectExtFiles = true;
-            Wz_Structure.DefaultEncoding = encoding;
-            Wz_Structure.DefaultImgCheckDisabled = disableImgCheck;
-            // Then our constructor
-            string baseWzPath = Path.Combine(mapleStoryPath, MapleStoryPathHelper.MapleStoryBaseWzName);
-            if (!File.Exists(baseWzPath))
+            _wzContext = new WzContext(mapleStoryPath, encoding, disableImgCheck);
+            _wzStructure = _wzContext.WzStructure;
+        }
+
+        protected void ActivateWzContext()
+        {
+            _wzContext.Activate();
+        }
+
+        public virtual void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
             {
-                throw new ArgumentException($"Cannot find {MapleStoryPathHelper.MapleStoryBaseWzName} in given directory {mapleStoryPath}.");
+                return;
             }
-            // See WzComparerR2.MainForm.openWz()
-            _wzStructure = new Wz_Structure();
-            if (string.Equals(Path.GetExtension(baseWzPath), ".ms", StringComparison.OrdinalIgnoreCase))
+
+            if (disposing)
             {
-                _wzStructure.LoadMsFile(baseWzPath);
+                _wzContext.Dispose();
             }
-            else if (_wzStructure.IsKMST1125WzFormat(baseWzPath))
-            {
-                _wzStructure.LoadKMST1125DataWz(baseWzPath);
-                if (string.Equals(Path.GetFileName(baseWzPath), "Base.wz", StringComparison.OrdinalIgnoreCase))
-                {
-                    string packsDir = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(baseWzPath)), "Packs");
-                    if (Directory.Exists(packsDir))
-                    {
-                        foreach (var msFile in Directory.GetFiles(packsDir, "*.ms"))
-                        {
-                            _wzStructure.LoadMsFile(msFile);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                _wzStructure.Load(baseWzPath, true);
-            }
+            _disposed = true;
         }
 
         /// <summary>

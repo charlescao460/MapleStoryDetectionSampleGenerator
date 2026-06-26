@@ -6,10 +6,15 @@
         <OutputType>Exe</OutputType>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="CommandLineParser" Version="2.9.1" />
+        <PackageReference Include="YamlDotNet" Version="15.1.2" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\MapleStory.Avatar\MapleStory.Avatar.csproj" />
+        <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj" />
         <ProjectReference Include="..\MapleStory.Sampler\MapleStory.Sampler.csproj" />
+        <ProjectReference Include="..\WzComparerR2\WzComparerR2.Common\WzComparerR2.Common.csproj" />
+        <ProjectReference Include="..\WzComparerR2\WzComparerR2.PluginBase\WzComparerR2.PluginBase.csproj" />
+        <ProjectReference Include="..\WzComparerR2\WzComparerR2.WzLib\WzComparerR2.WzLib.csproj" />
     </ItemGroup>
     <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
         <Content Include="..\WzComparerR2\References\x86\*.dll">
@@ -25,6 +30,30 @@
             <TargetPath>Lib\ARM64\%(Filename)%(Extension)</TargetPath>
         </Content>
     </ItemGroup>
+    <ItemGroup>
+      <Compile Update="Properties\Resources.Designer.cs">
+        <DesignTime>True</DesignTime>
+        <AutoGen>True</AutoGen>
+        <DependentUpon>Resources.resx</DependentUpon>
+      </Compile>
+      <Compile Update="Properties\Settings.Designer.cs">
+        <DesignTimeSharedInput>True</DesignTimeSharedInput>
+        <AutoGen>True</AutoGen>
+        <DependentUpon>Settings.settings</DependentUpon>
+      </Compile>
+    </ItemGroup>
+    <ItemGroup>
+      <EmbeddedResource Update="Properties\Resources.resx">
+        <Generator>ResXFileCodeGenerator</Generator>
+        <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      </EmbeddedResource>
+    </ItemGroup>
+    <ItemGroup>
+      <None Update="Properties\Settings.settings">
+        <Generator>SettingsSingleFileGenerator</Generator>
+        <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+      </None>
+    </ItemGroup>
     <Target Name="StageWzComparerMapRenderPlugin" AfterTargets="Build">
         <PropertyGroup>
             <_MapRenderPluginSourceDir>$(MSBuildThisFileDirectory)..\WzComparerR2\WzComparerR2\bin\$(Configuration)\$(TargetFramework)\Plugin\WzComparerR2.MapRender\</_MapRenderPluginSourceDir>
@@ -34,9 +63,6 @@
         <ItemGroup Condition="Exists('$(_MapRenderPluginSourceDir)')">
             <_MapRenderPluginFiles Include="$(_MapRenderPluginSourceDir)**\*" />
         </ItemGroup>
-        <Copy SourceFiles="@(_MapRenderPluginFiles)"
-              DestinationFiles="@(_MapRenderPluginFiles->'$(_MapRenderPluginTargetDir)%(RecursiveDir)%(Filename)%(Extension)')"
-              SkipUnchangedFiles="true"
-              Condition="'@(_MapRenderPluginFiles)' != ''" />
+        <Copy SourceFiles="@(_MapRenderPluginFiles)" DestinationFiles="@(_MapRenderPluginFiles->'$(_MapRenderPluginTargetDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="'@(_MapRenderPluginFiles)' != ''" />
     </Target>
 </Project>

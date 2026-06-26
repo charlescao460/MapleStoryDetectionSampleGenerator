@@ -27,13 +27,17 @@ namespace MapleStory.Sampler
         private readonly string _trainingImagesPath;
         private readonly string _validationImagesPath;
         private readonly Random _random;
-        private readonly List<ObjectClass> _occurrenceClasses;
+        private readonly Dictionary<ObjectClass, int> _categoryIds;
         private readonly string _datasetName;
+        private readonly object _sync = new object();
         private readonly List<CocoImage> _trainingImages;
         private readonly List<CocoImage> _validationImages;
         private readonly List<CocoCategory> _categories;
         private readonly List<CocoAnnotation> _trainingAnnotations;
         private readonly List<CocoAnnotation> _validationAnnotations;
+        private int _nextImageId = 1;
+        private int _nextCategoryId = 1;
+        private int _nextAnnotationId = 1;
 
         public CocoWriter(string path, string name)
         {
@@ -56,11 +60,10 @@ namespace MapleStory.Sampler
             Directory.CreateDirectory(AnnotationsPath);
 
             _random = new Random();
-            _occurrenceClasses = new List<ObjectClass>();
+            _categoryIds = new Dictionary<ObjectClass, int>();
             _datasetName = name;
             _trainingImages = new List<CocoImage>();
             _validationImages = new List<CocoImage>();
-            _validationAnnotations = new List<CocoAnnotation>();
             _categories = new List<CocoCategory>();
             _trainingAnnotations = new List<CocoAnnotation>();
             _validationAnnotations = new List<CocoAnnotation>();
@@ -68,81 +71,109 @@ namespace MapleStory.Sampler
 
         public void Write(Sample sample)
         {
-            double rand = _random.NextDouble();
-            List<CocoAnnotation> annotationsToAdd;
-            List<CocoImage> imagesToAdd;
-            string pathToWrite;
-            if (rand < DefaultTestingPortion)
+            lock (_sync)
             {
-                annotationsToAdd = _validationAnnotations;
-                imagesToAdd = _validationImages;
-                pathToWrite = _validationImagesPath;
-            }
-            else
-            {
-                annotationsToAdd = _trainingAnnotations;
-                imagesToAdd = _trainingImages;
-                pathToWrite = _trainingImagesPath;
-            }
-            // Write image
-            string jpgFileName = sample.Guid + ".jpg";
-            using FileStream imageStream = new FileStream(Path.Combine(pathToWrite, jpgFileName), FileMode.CreateNew);
-            sample.ImageStream.WriteTo(imageStream);
-            imageStream.Flush();
-            CocoImage cocoImage = new CocoImage(jpgFileName, sample.Width, sample.Height);
-            imagesToAdd.Add(cocoImage);
+                double rand = _random.NextDouble();
+                List<CocoAnnotation> annotationsToAdd;
+                List<CocoImage> imagesToAdd;
+                string pathToWrite;
+                if (rand < DefaultTestingPortion)
+                {
+                    annotationsToAdd = _validationAnnotations;
+                    imagesToAdd = _validationImages;
+                    pathToWrite = _validationImagesPath;
+                }
+                else
+                {
+                    annotationsToAdd = _trainingAnnotations;
+                    imagesToAdd = _trainingImages;
+                    pathToWrite = _trainingImagesPath;
+                }
+                // Write image
+                string jpgFileName = sample.Guid + ".jpg";
+                using FileStream imageStream = new FileStream(Path.Combine(pathToWrite, jpgFileName), FileMode.CreateNew);
+                sample.ImageStream.WriteTo(imageStream);
+                imageStream.Flush();
+                CocoImage cocoImage = new CocoImage(jpgFileName, sample.Width, sample.Height, _nextImageId++);
+                imagesToAdd.Add(cocoImage);
 
-            // Write annotations
-            GetAnnotationFromSample(sample, cocoImage.Id, ref annotationsToAdd);
+                // Write annotations
+                GetAnnotationFromSample(sample, cocoImage.Id, ref annotationsToAdd);
+            }
         }
 
         public void Finish()
         {
-            CocoLicense license = new CocoLicense();
-            // Write training set
-            CocoJson trainingJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
-                license,
-                _trainingImages,
-                _categories,
-                _trainingAnnotations);
-            using FileStream trainingStream =
-                new FileStream(Path.Combine(AnnotationsPath, TrainingJson), FileMode.CreateNew);
-            using Utf8JsonWriter trainingWriter = new Utf8JsonWriter(trainingStream);
-            JsonSerializer.Serialize(trainingWriter, trainingJson);
+            lock (_sync)
+            {
+                CocoLicense license = new CocoLicense();
+                // Write training set
+                CocoJson trainingJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
+                    license,
+                    _trainingImages,
+                    _categories,
+                    _trainingAnnotations);
+                using FileStream trainingStream =
+                    new FileStream(Path.Combine(AnnotationsPath, TrainingJson), FileMode.CreateNew);
+                using Utf8JsonWriter trainingWriter = new Utf8JsonWriter(trainingStream);
+                JsonSerializer.Serialize(trainingWriter, trainingJson);
 
-            // Write validation set
-            CocoJson validationJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
-                license,
-                _validationImages,
-                _categories,
-                _validationAnnotations);
-            using FileStream validationStream =
-                new FileStream(Path.Combine(AnnotationsPath, ValidationJson), FileMode.CreateNew);
-            using Utf8JsonWriter validationWriter = new Utf8JsonWriter(validationStream);
-            JsonSerializer.Serialize(validationWriter, validationJson);
+                // Write validation set
+                CocoJson validationJson = new CocoJson(new CocoInfo($"{_datasetName} - Training"),
+                    license,
+                    _validationImages,
+                    _categories,
+                    _validationAnnotations);
+                using FileStream validationStream =
+                    new FileStream(Path.Combine(AnnotationsPath, ValidationJson), FileMode.CreateNew);
+                using Utf8JsonWriter validationWriter = new Utf8JsonWriter(validationStream);
+                JsonSerializer.Serialize(validationWriter, validationJson);
 
-            // Flush buffer (if any)
-            trainingWriter.Flush();
-            trainingStream.Flush();
-            validationWriter.Flush();
-            validationStream.Flush();
+                // Flush buffer (if any)
+                trainingWriter.Flush();
+                trainingStream.Flush();
+                validationWriter.Flush();
+                validationStream.Flush();
+            }
         }
 
         private void GetAnnotationFromSample(Sample sample, int imageId, ref List<CocoAnnotation> dstList)
         {
             foreach (var sampleItem in sample.Items)
             {
-                ObjectClass type = sampleItem.Type;
-                if (!_occurrenceClasses.Contains(type))
-                {
-                    _occurrenceClasses.Add(type);
-                    _categories.Add(new CocoCategory("element", type.ToString()));
-                }
-                int categoryId = _occurrenceClasses.IndexOf(type) + 1;
+                int categoryId = GetCategoryId(sampleItem.Type);
                 CocoAnnotation toAdd = new CocoAnnotation(imageId, sampleItem.X, sampleItem.Y, sampleItem.Width,
-                    sampleItem.Height, categoryId);
+                    sampleItem.Height, categoryId, _nextAnnotationId++, sampleItem.Keypoints);
                 dstList.Add(toAdd);
             }
+        }
+
+        private int GetCategoryId(ObjectClass type)
+        {
+            if (_categoryIds.TryGetValue(type, out int categoryId))
+            {
+                return categoryId;
+            }
+
+            categoryId = _nextCategoryId++;
+            _categoryIds.Add(type, categoryId);
+            _categories.Add(CreateCategory(type, categoryId));
+            return categoryId;
+        }
+
+        private static CocoCategory CreateCategory(ObjectClass type, int categoryId)
+        {
+            if (type == ObjectClass.RuneArrow)
+            {
+                return new CocoCategory(
+                    "rune",
+                    "rune_arrow",
+                    categoryId,
+                    new[] { "start", "end" },
+                    new[] { new[] { 1, 2 } });
+            }
+
+            return new CocoCategory("element", type.ToString(), categoryId);
         }
 
         private static void CleanDirectory(string path)
@@ -227,14 +258,12 @@ namespace MapleStory.Sampler
             [JsonPropertyName("id")]
             public int Id { get; }
 
-            private static int _count = 1;
-
-            public CocoImage(string fileName, int width, int height)
+            public CocoImage(string fileName, int width, int height, int id)
             {
                 FileName = fileName;
                 Width = width;
                 Height = height;
-                Id = _count++;
+                Id = id;
             }
         }
 
@@ -249,13 +278,26 @@ namespace MapleStory.Sampler
             [JsonPropertyName("name")]
             public string Name { get; }
 
-            private static int _count = 1;
+            [JsonPropertyName("keypoints")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public string[] Keypoints { get; }
 
-            public CocoCategory(string superCategory, string name)
+            [JsonPropertyName("skeleton")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public int[][] Skeleton { get; }
+
+            public CocoCategory(
+                string superCategory,
+                string name,
+                int id,
+                string[] keypoints = null,
+                int[][] skeleton = null)
             {
                 SuperCategory = superCategory;
                 Name = name;
-                Id = _count++;
+                Id = id;
+                Keypoints = keypoints;
+                Skeleton = skeleton;
             }
         }
 
@@ -279,12 +321,26 @@ namespace MapleStory.Sampler
             [JsonPropertyName("category_id")]
             public int CategoryId { get; }
 
+            [JsonPropertyName("keypoints")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public float[] Keypoints { get; }
+
+            [JsonPropertyName("num_keypoints")]
+            [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            public int? NumKeypoints { get; }
+
             [JsonPropertyName("id")]
             public int Id { get; }
 
-            private static int _count = 1;
-
-            public CocoAnnotation(int imageId, float x, float y, float width, float height, int categoryId)
+            public CocoAnnotation(
+                int imageId,
+                float x,
+                float y,
+                float width,
+                float height,
+                int categoryId,
+                int id,
+                IList<TargetKeypoint> keypoints)
             {
                 Segmentation = new float[][]
                 {
@@ -294,7 +350,14 @@ namespace MapleStory.Sampler
                 ImageId = imageId;
                 Bbox = new float[] { x, y, width, height };
                 CategoryId = categoryId;
-                Id = _count++;
+                Id = id;
+                if (keypoints != null && keypoints.Count > 0)
+                {
+                    Keypoints = keypoints
+                        .SelectMany(keypoint => new[] { keypoint.X, keypoint.Y, (float)keypoint.Visibility })
+                        .ToArray();
+                    NumKeypoints = keypoints.Count(keypoint => keypoint.Visibility > 0);
+                }
             }
         }
 

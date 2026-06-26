@@ -15,6 +15,7 @@ namespace MapRender.Invoker
         CrossMapPortal,
         Foothold,
         LadderRope,
-        Unknown
+        Unknown,
+        RuneArrow
     }
 }

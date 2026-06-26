@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using CommandLine;
-using CommandLine.Text;
+using MapleStory.Avatar;
 using MapleStory.Common;
+using MapleStory.MachineLearningSampleGenerator.Configuration;
 using MapleStory.Sampler;
 using MapleStory.Sampler.PostProcessor;
 using MapRender.Invoker;
@@ -19,6 +18,8 @@ namespace MapleStory.MachineLearningSampleGenerator
 {
     internal static class Program
     {
+        private static readonly object RuneAssetCloneSync = new object();
+
         [DllImport("kernel32.dll")]
         static extern bool SetDllDirectory(string path);
 
@@ -48,201 +49,335 @@ namespace MapleStory.MachineLearningSampleGenerator
             SetDllDirectory(libPath); // Add dll search path for WzComparerR2
         }
 
-        private class Options
-        {
-            [Option('m', "map", Required = true, HelpText = "Space-separated Wz image ID of map(s) used for generating TFRecord.")]
-            public IEnumerable<string> Maps { get; set; }
-
-            [Option('x', "xStep", Required = true, HelpText = "Step in X.")]
-            public int StepX { get; set; }
-
-            [Option('y', "yStep", Required = true, HelpText = "Step in Y.")]
-            public int StepY { get; set; }
-
-            [Option('f', "format", Required = true, HelpText = "Output format, must be one of: [tfrecord, darknet, coco]")]
-            public string Format { get; set; }
-
-            [Option('o', "output", Required = false, Default = ".", HelpText = "Data set output location")]
-            public string OutputPath { get; set; }
-
-            [Option('w', "width", Required = false, Default = 1366, HelpText = "Width of sample image.")]
-            public int RenderWidth { get; set; }
-
-            [Option('h', "height", Required = false, Default = 768, HelpText = "Height of sample image.")]
-            public int RenderHeight { get; set; }
-
-            [Option('i', "interval", Required = false, Default = 0, HelpText = "Time interval in ms between each sample")]
-            public int SampleInterval { get; set; }
-
-            [Option('p', "path", Required = false, Default = "", HelpText = "MapleStory Installed Path")]
-            public string MapleStoryPath { get; set; }
-
-            [Option("post", Required = false, Default = false, HelpText = "Indicate whether to enable post-processing.")]
-            public bool PostProcessingEnable { get; set; }
-
-            [Option("players", Required = false, Default = "", HelpText = "Directory where the post-processing player images stored.")]
-            public string PlayerImageDirectory { get; set; }
-
-            [Option('e', "encoding", Required = false, HelpText = "Encoding used to decode Wz strings. Using system default if not specified.")]
-            public string Encoding { get; set; } = "";
-        }
-
         [STAThread]
         private static int Main(string[] args)
         {
-            int ret = CommandLine.Parser.Default.ParseArguments<Options>(args).MapResult(RunAndReturn, OnParseError);
-            Console.WriteLine("MapleStoryDetectionSampleGenerator exited with code= {0}", ret);
-            FreeConsole();
-            return ret;
-        }
-
-        private static int OnParseError(IEnumerable<Error> errors)
-        {
-            foreach (var error in errors)
+            int ret = -1;
+            try
             {
-                Console.Error.WriteLine(Enum.GetName(typeof(ErrorType), error.Tag));
+                BootstrapArguments bootstrapArguments = BootstrapArgumentsParser.Parse(args);
+                if (bootstrapArguments.ShowHelp)
+                {
+                    PrintBanner();
+                    Console.WriteLine(GetHelpText());
+                    ret = 0;
+                    return ret;
+                }
+
+                if (bootstrapArguments.ShowVersion)
+                {
+                    PrintBanner();
+                    ret = 0;
+                    return ret;
+                }
+
+                PrintBanner();
+                ConfigurationLoader loader = new ConfigurationLoader();
+                ConfigurationResolver resolver = new ConfigurationResolver();
+                GeneratorConfig config = loader.Load(bootstrapArguments.ConfigPath);
+                ResolvedRunConfig runConfig = resolver.Resolve(config, bootstrapArguments.ConfigPath);
+
+                Console.WriteLine("Configuration: {0}", runConfig.ConfigPath);
+                Console.WriteLine("MapleStory Location: {0}", runConfig.MapleStoryPath);
+                ret = Run(runConfig);
             }
-            return -1;
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+            }
+            finally
+            {
+                Console.WriteLine("MapleStoryDetectionSampleGenerator exited with code= {0}", ret);
+                FreeConsole();
+            }
+
+            return ret;
         }
 
         /// <summary>
         /// Main logic here
         /// </summary>
-        private static int RunAndReturn(Options options)
+        private static int Run(ResolvedRunConfig config)
         {
-            // Print program info
-            Console.WriteLine(HeadingInfo.Default);
-            Console.WriteLine(FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).LegalCopyright);
-            // Check arguments
-            PreRunTest(options);
-            Console.WriteLine("MapleStory Location: {0}", options.MapleStoryPath);
-            // Initialize render
-            MapRenderInvoker renderInvoker = new MapRenderInvoker(options.MapleStoryPath,
-                options.Encoding == string.Empty ? Encoding.Default : Encoding.GetEncoding(options.Encoding),
-                false);
-            Queue<string> maps = new Queue<string>(options.Maps);
-            var first = maps.Dequeue();
-            renderInvoker.LoadMap(first);
-            renderInvoker.Launch(options.RenderWidth, options.RenderHeight);
-            // Initialize sampler
-            IDatasetWriter writer = GetDatasetWriter(options, first);
-            Sampler.Sampler sampler = new Sampler.Sampler(renderInvoker);
-            if (options.PostProcessingEnable && options.PlayerImageDirectory != "")
+            switch (config.GenerationMode)
             {
-                IPostProcessor postProcessor = new PlayerProcessor(options.PlayerImageDirectory);
-                sampler.OnSampleCaptured += (s, e) => postProcessor.Process(s);
+                case GenerationMode.Character:
+                    return RunCharacter(config);
+                case GenerationMode.Rune:
+                    return RunRune(config);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(config), config.GenerationMode, null);
             }
+        }
 
-            while (true)
+        private static int RunCharacter(ResolvedRunConfig config)
+        {
+            using AvatarGenerator avatarGenerator = new AvatarGenerator(config.MapleStoryPath, config.TextEncoding, false);
+            AvatarPlayerFrameSource playerFrameSource = new AvatarPlayerFrameSource(avatarGenerator);
+            PlayerPostProcessorValidator.Validate(config.Maps, playerFrameSource);
+            return RunSampler(
+                config,
+                map => CreateCharacterPostProcessorPipeline(config, map));
+        }
+
+        private static int RunRune(ResolvedRunConfig config)
+        {
+            using RuneAssetSet runeAssets = RuneAssetLoader.Load(config.MapleStoryPath, config.TextEncoding);
+            return RunSampler(
+                config,
+                _ => CreateRunePostProcessorPipeline(runeAssets));
+        }
+
+        private static int RunSampler(
+            ResolvedRunConfig config,
+            Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
+        {
+            IDatasetWriter writer = GetDatasetWriter(config);
+            try
             {
-                sampler.SampleAll(options.StepX, options.StepY, writer, options.SampleInterval);
-                if (maps.Count == 0)
-                {
-                    break;
-                }
-                renderInvoker.SwitchMap(maps.Dequeue());
+                Console.WriteLine("Concurrency: {0}", config.Concurrency);
+                Console.WriteLine("Maps: {0}", config.Maps.Count);
+                ConcurrentMapRunner.Run(
+                    config.Maps,
+                    config.Concurrency,
+                    _ => new MapSamplerWorker(config, writer, createPostProcessors),
+                    (worker, map) => worker.Sample(map),
+                    (map, ex) => Console.Error.WriteLine($"Error sampling map {map.Id}: {ex}"));
+                writer.Finish();
             }
-            writer.Finish();
+            finally
+            {
+                if (writer is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
             return 0;
         }
 
-
-        /// <summary>
-        /// Throw if condition not meet.
-        /// </summary>
-        private static void PreRunTest(Options options)
+        private static PostProcessorPipeline CreateCharacterPostProcessorPipeline(
+            ResolvedRunConfig config,
+            ResolvedMapConfig map)
         {
-            // Check resolution
-            if (options.RenderHeight <= 0)
+            if (map.PostProcessors.Count == 0)
             {
-                throw new ArgumentException("Render size cannot exceed screen size. Height illegal.",
-                    nameof(options.RenderHeight));
-            }
-            if (options.RenderWidth <= 0)
-            {
-                throw new ArgumentException("Render size cannot exceed screen size. Width illegal.",
-                    nameof(options.RenderWidth));
+                return PostProcessorPipeline.Empty;
             }
 
-            // Check format
-            Enum.Parse(typeof(OutputFormat), options.Format, true);
+            AvatarGenerator avatarGenerator = new AvatarGenerator(config.MapleStoryPath, config.TextEncoding, false);
+            AvatarPlayerFrameSource playerFrameSource = new AvatarPlayerFrameSource(avatarGenerator);
+            IReadOnlyList<IPostProcessor> postProcessors = PostProcessorFactory.Create(map.PostProcessors, playerFrameSource);
+            return new PostProcessorPipeline(postProcessors, avatarGenerator);
+        }
 
-            // Check file path
-            if (options.MapleStoryPath == string.Empty)
+        private static PostProcessorPipeline CreateRunePostProcessorPipeline(RuneAssetSet source)
+        {
+            RuneAssetSet clonedAssets = CloneRuneAssets(source);
+            return new PostProcessorPipeline(new IPostProcessor[] { new RuneProcessor(clonedAssets) }, clonedAssets);
+        }
+
+        private static RuneAssetSet CloneRuneAssets(RuneAssetSet source)
+        {
+            lock (RuneAssetCloneSync)
             {
-                if (MapleStoryPathHelper.FoundMapleStoryInstalled)
+                return new RuneAssetSet(
+                    source.Arrows.Select(arrow => new RuneArrowAsset(
+                        arrow.Name,
+                        arrow.Direction,
+                        new Bitmap(arrow.Arrow),
+                        arrow.Bases.Select(bitmap => new Bitmap(bitmap)))),
+                    source.Noises.Select(bitmap => new Bitmap(bitmap)));
+            }
+        }
+
+        internal sealed class PostProcessorPipeline : IDisposable
+        {
+            public static PostProcessorPipeline Empty => new PostProcessorPipeline(Array.Empty<IPostProcessor>(), null);
+
+            private readonly IDisposable _owner;
+            private bool _disposed;
+
+            public PostProcessorPipeline(IReadOnlyList<IPostProcessor> processors, IDisposable owner)
+            {
+                Processors = processors ?? Array.Empty<IPostProcessor>();
+                _owner = owner;
+            }
+
+            public IReadOnlyList<IPostProcessor> Processors { get; }
+
+            public void Dispose()
+            {
+                if (_disposed)
                 {
-                    options.MapleStoryPath = MapleStoryPathHelper.MapleStoryInstallDirectory;
+                    return;
                 }
-                else
+
+                foreach (IPostProcessor postProcessor in Processors)
                 {
-                    throw new ArgumentException("Cannot find MapleStory installed location. Please specify it in commandline or retry as Administrator.");
-                }
-            }
-            else if (!Directory.Exists(options.MapleStoryPath))
-            {
-                throw new ArgumentException("Supplied MapleStory directory does not exist.");
-            }
-
-            // Check map id format
-            foreach (var map in options.Maps)
-            {
-                string id = map.Replace(".img", string.Empty);
-                if (!id.All(char.IsDigit))
-                {
-                    throw new ArgumentException("Supplied Map Id is not in correct format." +
-                                                " --map parameter should be space-separated list of IDs. " +
-                                                "E.g. --map 450007010 450007060");
-                }
-            }
-
-            // Check encoding
-            if ((options.Encoding != string.Empty) &&
-                Encoding.GetEncodings()
-                .Any(e => e.Name.Equals(options.Encoding, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new ArgumentException($"{options.Encoding} is not an available Encoding in your system.");
-            }
-
-            // Check output path
-            if (!Directory.Exists(options.OutputPath))
-            {
-                throw new ArgumentException($"OutputPath {options.OutputPath} does not exist.");
-            }
-
-            // Check interval
-            if (options.SampleInterval < 0)
-            {
-                throw new ArgumentException("SampleInterval cannot be negative!");
-            }
-
-            // Check for post-processing
-            if (options.PostProcessingEnable)
-            {
-                if (options.PlayerImageDirectory != "")
-                {
-                    if (!Directory.Exists(options.PlayerImageDirectory))
+                    if (postProcessor is IDisposable disposable)
                     {
-                        throw new ArgumentException($"PlayerImageDirectory {options.PlayerImageDirectory} cannot be found!");
+                        disposable.Dispose();
                     }
                 }
+
+                _owner?.Dispose();
+                _disposed = true;
             }
         }
 
-        private static IDatasetWriter GetDatasetWriter(Options options, string map)
+        private sealed class MapSamplerWorker : IDisposable
         {
-            switch (Enum.Parse(typeof(OutputFormat), options.Format, true))
+            private readonly ResolvedRunConfig _config;
+            private readonly IDatasetWriter _writer;
+            private readonly Func<ResolvedMapConfig, PostProcessorPipeline> _createPostProcessors;
+            private MapRenderInvoker _renderInvoker;
+            private Sampler.Sampler _sampler;
+            private PostProcessorPipeline _cachedPostProcessors;
+
+            public MapSamplerWorker(
+                ResolvedRunConfig config,
+                IDatasetWriter writer,
+                Func<ResolvedMapConfig, PostProcessorPipeline> createPostProcessors)
+            {
+                _config = config;
+                _writer = writer;
+                _createPostProcessors = createPostProcessors;
+            }
+
+            public void Sample(ResolvedMapConfig map)
+            {
+                try
+                {
+                    EnsureRenderer(map);
+                    if (_config.GenerationMode == GenerationMode.Rune)
+                    {
+                        PostProcessorPipeline postProcessors = GetCachedPostProcessors(map);
+                        _sampler.SampleAll(map.Count, _writer, map.IntervalMs, postProcessors.Processors, map.Id);
+                    }
+                    else
+                    {
+                        using PostProcessorPipeline postProcessors = _createPostProcessors(map);
+                        _sampler.SampleAll(map.Count, _writer, map.IntervalMs, postProcessors.Processors, map.Id);
+                    }
+                }
+                catch
+                {
+                    ResetRenderer();
+                    throw;
+                }
+            }
+
+            public void Dispose()
+            {
+                ResetRenderer();
+                _cachedPostProcessors?.Dispose();
+                _cachedPostProcessors = null;
+            }
+
+            private PostProcessorPipeline GetCachedPostProcessors(ResolvedMapConfig map)
+            {
+                if (_cachedPostProcessors == null)
+                {
+                    _cachedPostProcessors = _createPostProcessors(map);
+                }
+
+                return _cachedPostProcessors;
+            }
+
+            private void EnsureRenderer(ResolvedMapConfig map)
+            {
+                if (_renderInvoker == null || !_renderInvoker.IsRunning)
+                {
+                    LaunchRenderer(map);
+                    return;
+                }
+
+                try
+                {
+                    _renderInvoker.SwitchMap(map.Id);
+                }
+                catch (Exception ex) when (IsRecoverableRendererSwitchFailure(ex))
+                {
+                    Console.Error.WriteLine(
+                        $"Switching to map {map.Id} failed; relaunching renderer for this map. {ex.GetType().Name}: {ex.Message}");
+                    ResetRenderer();
+                    LaunchRenderer(map);
+                }
+            }
+
+            private void LaunchRenderer(ResolvedMapConfig map)
+            {
+                ResetRenderer();
+                _renderInvoker = new MapRenderInvoker(_config.MapleStoryPath, _config.TextEncoding, false);
+                _renderInvoker.LoadMap(map.Id);
+                _renderInvoker.Launch(_config.RenderWidth, _config.RenderHeight);
+                _sampler = new Sampler.Sampler(_renderInvoker);
+            }
+
+            private void ResetRenderer()
+            {
+                _sampler = null;
+                _renderInvoker?.Dispose();
+                _renderInvoker = null;
+            }
+
+            private static bool IsRecoverableRendererSwitchFailure(Exception exception)
+            {
+                return exception is TimeoutException || exception is InvalidOperationException;
+            }
+        }
+
+        private static IDatasetWriter GetDatasetWriter(ResolvedRunConfig config)
+        {
+            EnsureTargetDirectoryIsEmptyOrCreate(config.OutputPath);
+
+            switch (config.OutputFormat)
             {
                 case OutputFormat.TfRecord:
-                    return new TfRecordWriter(Path.Combine(options.OutputPath, map));
+                    return new TfRecordWriter(Path.Combine(config.OutputPath, config.OutputName));
                 case OutputFormat.Darknet:
-                    return new DarknetWriter(options.OutputPath);
+                    return new DarknetWriter(config.OutputPath);
                 case OutputFormat.Coco:
-                    return new CocoWriter(options.OutputPath, $"MapleStory {map}.img Object Detection Samples");
+                    return new CocoWriter(config.OutputPath, config.OutputName);
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(options), options, null);
+                    throw new ArgumentOutOfRangeException(nameof(config), config, null);
             }
         }
 
+        internal static void EnsureTargetDirectoryIsEmptyOrCreate(string targetDirectory)
+        {
+            if (!Directory.Exists(targetDirectory))
+            {
+                Directory.CreateDirectory(targetDirectory);
+                return;
+            }
+
+            if (Directory.EnumerateFileSystemEntries(targetDirectory).Any())
+            {
+                throw new InvalidOperationException(
+                    $"Output path '{targetDirectory}' already exists and is not empty. Choose an empty or new output path to avoid overwriting an existing dataset.");
+            }
+        }
+
+        private static void PrintBanner()
+        {
+            AssemblyName assemblyName = Assembly.GetExecutingAssembly().GetName();
+            Console.WriteLine("{0} {1}", assemblyName.Name, assemblyName.Version);
+            Console.WriteLine(FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).LegalCopyright);
+        }
+
+        private static string GetHelpText()
+        {
+            return
+@"Usage:
+  MapleStory.MachineLearningSampleGenerator --config <path>
+  MapleStory.MachineLearningSampleGenerator --help
+  MapleStory.MachineLearningSampleGenerator --version
+
+Options:
+  -c, --config <path>   Path to the YAML configuration file.
+  -h, --help            Display this help screen.
+  -v, --version         Display version information.";
+        }
     }
 }
