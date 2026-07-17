@@ -37,20 +37,27 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             OutputFormat outputFormat = ResolveOutputFormat(config.Output?.Format);
             ValidateModeOutput(generationMode, outputFormat);
             string outputPath = ResolveDirectoryPath(config.Output?.Path, configDirectory, "output.path");
-            string outputName = RequireNonEmpty(config.Output?.Name, "output.name");
+            string outputName = generationMode == GenerationMode.Geometry
+                ? (string.IsNullOrWhiteSpace(config.Output?.Name) ? "geometry" : config.Output.Name)
+                : RequireNonEmpty(config.Output?.Name, "output.name");
             int renderWidth = config.Render?.Width ?? 0;
             int renderHeight = config.Render?.Height ?? 0;
-            if (renderWidth <= 0)
+            if (generationMode != GenerationMode.Geometry)
             {
-                throw new ConfigurationException("render.width must be greater than 0.");
-            }
-            if (renderHeight <= 0)
-            {
-                throw new ConfigurationException("render.height must be greater than 0.");
+                if (renderWidth <= 0)
+                {
+                    throw new ConfigurationException("render.width must be greater than 0.");
+                }
+                if (renderHeight <= 0)
+                {
+                    throw new ConfigurationException("render.height must be greater than 0.");
+                }
             }
             int concurrency = ResolveConcurrency(config.Concurrency);
 
-            ResolvedSampling defaultSampling = ResolveRootSampling(config.Sampling);
+            ResolvedSampling defaultSampling = generationMode == GenerationMode.Geometry
+                ? new ResolvedSampling(1, 0)
+                : ResolveRootSampling(config.Sampling);
             IReadOnlyList<PostProcessorConfig> defaultPostProcessors =
                 ResolvePostProcessors(config.PostProcessors, configDirectory, "postProcessors");
 
@@ -221,7 +228,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         {
             if (!Enum.TryParse(rawMode, true, out GenerationMode generationMode))
             {
-                throw new ConfigurationException($"Unsupported mode '{rawMode}'. Use 'character' or 'rune'.");
+                throw new ConfigurationException($"Unsupported mode '{rawMode}'. Use 'character', 'rune', or 'geometry'.");
             }
 
             return generationMode;
@@ -233,6 +240,14 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             {
                 throw new ConfigurationException("mode 'rune' only supports output.format 'coco'.");
             }
+            if (generationMode == GenerationMode.Geometry && outputFormat != OutputFormat.Geometry)
+            {
+                throw new ConfigurationException("mode 'geometry' only supports output.format 'geometry'.");
+            }
+            if (generationMode != GenerationMode.Geometry && outputFormat == OutputFormat.Geometry)
+            {
+                throw new ConfigurationException("output.format 'geometry' requires mode 'geometry'.");
+            }
         }
 
         private static void ValidateModePostProcessors(
@@ -240,14 +255,15 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             GeneratorConfig config,
             IReadOnlyList<ResolvedMapConfig> maps)
         {
-            if (generationMode != GenerationMode.Rune)
+            if (generationMode != GenerationMode.Rune && generationMode != GenerationMode.Geometry)
             {
                 return;
             }
 
+            string modeName = generationMode == GenerationMode.Rune ? "rune" : "geometry";
             if (config.PostProcessors != null && config.PostProcessors.Count > 0)
             {
-                throw new ConfigurationException("mode 'rune' does not support postProcessors.");
+                throw new ConfigurationException($"mode '{modeName}' does not support postProcessors.");
             }
 
             if (config.Maps != null)
@@ -256,7 +272,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 {
                     if (config.Maps[i]?.PostProcessors != null && config.Maps[i].PostProcessors.Count > 0)
                     {
-                        throw new ConfigurationException($"mode 'rune' does not support maps[{i}].postProcessors.");
+                        throw new ConfigurationException($"mode '{modeName}' does not support maps[{i}].postProcessors.");
                     }
                 }
             }
@@ -265,7 +281,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             {
                 if (maps[i].PostProcessors.Count > 0)
                 {
-                    throw new ConfigurationException($"mode 'rune' does not support maps[{i}].postProcessors.");
+                    throw new ConfigurationException($"mode '{modeName}' does not support maps[{i}].postProcessors.");
                 }
             }
         }

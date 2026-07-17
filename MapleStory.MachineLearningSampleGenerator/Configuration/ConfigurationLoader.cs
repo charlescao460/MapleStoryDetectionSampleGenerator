@@ -36,7 +36,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 root,
                 "root",
                 new[] { "mode", "mapleStoryPath", "encoding", "output", "render", "sampling", "concurrency", "postProcessors", "maps" },
-                new[] { "mode", "output", "render", "sampling", "maps" });
+                new[] { "mode", "output", "maps" });
 
             ParsedMaps maps = ParseMaps(root["maps"], "maps");
 
@@ -46,8 +46,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 MapleStoryPath = ReadOptionalString(root, "mapleStoryPath", "mapleStoryPath"),
                 Encoding = ReadOptionalString(root, "encoding", "encoding"),
                 Output = ParseOutput(root["output"], "output"),
-                Render = ParseRender(root["render"], "render"),
-                Sampling = ParseSampling(root["sampling"], "sampling"),
+                Render = root.TryGetValue("render", out YamlNode renderNode) ? ParseRender(renderNode, "render") : null,
+                Sampling = root.TryGetValue("sampling", out YamlNode samplingNode) ? ParseSampling(samplingNode, "sampling") : null,
                 Concurrency = ReadOptionalInt(root, "concurrency", "concurrency"),
                 PostProcessors = root.TryGetValue("postProcessors", out YamlNode processorsNode)
                     ? ParsePostProcessors(processorsNode, "postProcessors")
@@ -61,13 +61,13 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         private static OutputConfig ParseOutput(YamlNode node, string context)
         {
             Dictionary<string, YamlNode> output = ToDictionary(RequireMapping(node, context), context);
-            ValidateKeys(output, context, new[] { "format", "path", "name" }, new[] { "format", "path", "name" });
+            ValidateKeys(output, context, new[] { "format", "path", "name" }, new[] { "format", "path" });
 
             return new OutputConfig
             {
                 Format = ReadRequiredString(output, "format", $"{context}.format"),
                 Path = ReadRequiredString(output, "path", $"{context}.path"),
-                Name = ReadRequiredString(output, "name", $"{context}.name"),
+                Name = ReadOptionalString(output, "name", $"{context}.name"),
             };
         }
 

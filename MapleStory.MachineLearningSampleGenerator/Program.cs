@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -105,6 +105,8 @@ namespace MapleStory.MachineLearningSampleGenerator
                     return RunCharacter(config);
                 case GenerationMode.Rune:
                     return RunRune(config);
+                case GenerationMode.Geometry:
+                    return RunGeometry(config);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(config), config.GenerationMode, null);
             }
@@ -126,6 +128,13 @@ namespace MapleStory.MachineLearningSampleGenerator
             return RunSampler(
                 config,
                 _ => CreateRunePostProcessorPipeline(runeAssets));
+        }
+
+        private static int RunGeometry(ResolvedRunConfig config)
+        {
+            MapGeometryExporter exporter = new MapGeometryExporter(config.MapleStoryPath, config.TextEncoding);
+            exporter.ExportMaps(config.Maps.Select(map => map.Id), config.OutputPath);
+            return 0;
         }
 
         private static int RunSampler(

@@ -1,0 +1,8 @@
+mode: geometry
+output:
+  format: geometry
+  path: ../../hecate/resources/map_geometry
+maps:
+  - id: 410000520
+  - id: 410007014
+  - id: 410007037

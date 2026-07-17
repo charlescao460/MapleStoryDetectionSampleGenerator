@@ -69,6 +69,57 @@ maps:
             Assert.Equal(6, config.Concurrency);
         }
 
+        [Fact]
+        public void LoadResolved_GeometryModeDoesNotRequireRenderSamplingOrOutputName()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: geometry
+mapleStoryPath: ./maple
+output:
+  format: geometry
+  path: ./output
+maps:
+  - id: 410000520
+");
+
+            Assert.Equal(GenerationMode.Geometry, config.GenerationMode);
+            Assert.Equal(OutputFormat.Geometry, config.OutputFormat);
+            Assert.Equal("geometry", config.OutputName);
+            Assert.Equal(0, config.RenderWidth);
+            Assert.Equal(0, config.RenderHeight);
+            Assert.Equal(1, config.Maps[0].Count);
+        }
+
+        [Fact]
+        public void LoadResolved_GeometryFormatWithCharacterModeThrows()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+
+            ConfigurationException exception = Assert.Throws<ConfigurationException>(() => LoadResolved(workspace, @"
+mode: character
+mapleStoryPath: ./maple
+output:
+  format: geometry
+  path: ./output
+  name: dataset
+render:
+  width: 1366
+  height: 768
+sampling:
+  count: 5
+maps:
+  - id: 410000520
+"));
+
+            Assert.Contains("requires mode 'geometry'", exception.Message);
+        }
+
         [Theory]
         [InlineData(0)]
         [InlineData(-1)]
