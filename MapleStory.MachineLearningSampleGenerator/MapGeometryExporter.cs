@@ -102,57 +102,76 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new InvalidOperationException($"Map {rawMapId} was not found in the loaded WZ files.");
             }
 
-            Exception extractError;
-            image.TryExtract(out extractError);
-            if (extractError != null)
+            Wz_Image linkedImage = null;
+            try
             {
-                throw extractError;
+                Exception extractError;
+                image.TryExtract(out extractError);
+                if (extractError != null)
+                {
+                    throw extractError;
+                }
+
+                ResolvedMap resolvedMap = ResolveLinkedMap(root, image.Node, mapId, out linkedImage);
+                Wz_Node miniMapNode = resolvedMap.Node.Nodes["miniMap"];
+                if (miniMapNode == null)
+                {
+                    throw new InvalidOperationException($"Map {rawMapId} has no miniMap node.");
+                }
+
+                string imageName = rawMapId + ".png";
+                SaveMinimapImage(miniMapNode, Path.Combine(outputDirectory, imageName), rawMapId);
+                MapGeometryPayload payload = new MapGeometryPayload
+                {
+                    SchemaVersion = SchemaVersion,
+                    MapId = mapId,
+                    MapName = mapNames.TryGetValue(mapId, out string mapName) && !string.IsNullOrWhiteSpace(mapName)
+                        ? mapName
+                        : rawMapId,
+                    Minimap = ReadMinimap(miniMapNode, imageName),
+                    Platforms = ReadPlatforms(resolvedMap.Node.Nodes["foothold"]),
+                    Ropes = ReadRopes(resolvedMap.Node.Nodes["ladderRope"]),
+                    Portals = ReadPortals(resolvedMap.Node.Nodes["portal"], resolvedMap.MapId),
+                };
+
+                string json = JsonSerializer.Serialize(payload, JsonOptions) + "\n";
+                File.WriteAllText(Path.Combine(outputDirectory, rawMapId + ".json"), json, new UTF8Encoding(false));
+                Console.WriteLine(
+                    $"Exported {rawMapId}: {payload.Platforms.Count} platforms, {payload.Ropes.Count} ropes/ladders, {payload.Portals.Count} portals");
             }
-
-            ResolvedMap resolvedMap = ResolveLinkedMap(root, image.Node, mapId);
-            Wz_Node miniMapNode = resolvedMap.Node.Nodes["miniMap"];
-            if (miniMapNode == null)
+            finally
             {
-                throw new InvalidOperationException($"Map {rawMapId} has no miniMap node.");
+                try
+                {
+                    if (linkedImage != null && !ReferenceEquals(linkedImage, image))
+                    {
+                        linkedImage.Unextract();
+                    }
+                }
+                finally
+                {
+                    image.Unextract();
+                }
             }
-
-            string imageName = rawMapId + ".png";
-            SaveMinimapImage(miniMapNode, Path.Combine(outputDirectory, imageName), rawMapId);
-            MapGeometryPayload payload = new MapGeometryPayload
-            {
-                SchemaVersion = SchemaVersion,
-                MapId = mapId,
-                MapName = mapNames.TryGetValue(mapId, out string mapName) && !string.IsNullOrWhiteSpace(mapName)
-                    ? mapName
-                    : rawMapId,
-                Minimap = ReadMinimap(miniMapNode, imageName),
-                Platforms = ReadPlatforms(resolvedMap.Node.Nodes["foothold"]),
-                Ropes = ReadRopes(resolvedMap.Node.Nodes["ladderRope"]),
-                Portals = ReadPortals(resolvedMap.Node.Nodes["portal"], resolvedMap.MapId),
-            };
-
-            string json = JsonSerializer.Serialize(payload, JsonOptions) + "\n";
-            File.WriteAllText(Path.Combine(outputDirectory, rawMapId + ".json"), json, new UTF8Encoding(false));
-            Console.WriteLine(
-                $"Exported {rawMapId}: {payload.Platforms.Count} platforms, {payload.Ropes.Count} ropes/ladders, {payload.Portals.Count} portals");
         }
 
-        private static ResolvedMap ResolveLinkedMap(Wz_Node root, Wz_Node mapNode, int mapId)
+        private static ResolvedMap ResolveLinkedMap(Wz_Node root, Wz_Node mapNode, int mapId, out Wz_Image linkedImage)
         {
+            linkedImage = null;
             int? link = mapNode.Nodes["info"]?.Nodes["link"].GetValueEx<int>();
             if (!link.HasValue)
             {
                 return new ResolvedMap(mapNode, mapId);
             }
 
-            Wz_Image linked = WzTreeSearcher.SearchForMap(root, FormatWzMapId(link.Value) + ".img");
+            linkedImage = WzTreeSearcher.SearchForMap(root, FormatWzMapId(link.Value) + ".img");
             Exception extractError;
-            linked.TryExtract(out extractError);
+            linkedImage.TryExtract(out extractError);
             if (extractError != null)
             {
                 throw extractError;
             }
-            return new ResolvedMap(linked.Node, link.Value);
+            return new ResolvedMap(linkedImage.Node, link.Value);
         }
 
         private static MinimapPayload ReadMinimap(Wz_Node miniMapNode, string imageName)
