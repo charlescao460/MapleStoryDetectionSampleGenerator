@@ -256,7 +256,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             return linker.StringMap.ToDictionary(pair => pair.Key, pair => pair.Value.Name);
         }
 
-        private static List<PlatformPayload> ReadPlatforms(Wz_Node footholdRoot)
+        internal static List<PlatformPayload> ReadPlatforms(Wz_Node footholdRoot)
         {
             List<PlatformPayload> platforms = new List<PlatformPayload>();
             if (footholdRoot == null)
@@ -282,8 +282,8 @@ namespace MapleStory.MachineLearningSampleGenerator
 
                 platforms.Add(new PlatformPayload
                 {
-                    X1 = x1,
-                    X2 = x2,
+                    X1 = Math.Min(x1, x2),
+                    X2 = Math.Max(x1, x2),
                     Y = y1,
                     Kind = "platform",
                 });
@@ -291,7 +291,7 @@ namespace MapleStory.MachineLearningSampleGenerator
 
             return platforms
                 .OrderBy(p => p.Y)
-                .ThenBy(p => Math.Min(p.X1, p.X2))
+                .ThenBy(p => p.X1)
                 .ToList();
         }
 
@@ -467,7 +467,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             public string Image { get; set; }
         }
 
-        private sealed class PlatformPayload
+        internal sealed class PlatformPayload
         {
             [JsonPropertyName("x1")]
             public int X1 { get; set; }
