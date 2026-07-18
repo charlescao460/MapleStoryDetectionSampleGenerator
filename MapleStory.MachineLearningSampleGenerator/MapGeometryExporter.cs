@@ -64,12 +64,12 @@ namespace MapleStory.MachineLearningSampleGenerator
             string stagingDirectory = Path.Combine(
                 outputParent,
                 ".hecate-map-pack-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(stagingDirectory);
-
-            using WzContext context = new WzContext(_mapleStoryPath, _encoding, false);
-            context.Activate();
             try
             {
+                Directory.CreateDirectory(stagingDirectory);
+                using WzContext context = new WzContext(_mapleStoryPath, _encoding, false);
+                context.Activate();
+
                 IReadOnlyDictionary<int, string> mapNames = LoadMapNames(context);
                 IReadOnlyDictionary<int, Wz_Image> mapIndex = BuildMapIndex(context.WzStructure.WzNode);
                 foreach (NormalizedMapExportRequest map in normalizedMaps)
@@ -121,12 +121,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             };
             try
             {
-                Exception extractError;
-                image.TryExtract(out extractError);
-                if (extractError != null)
-                {
-                    throw extractError;
-                }
+                ExtractMapImage(image, mapId);
 
                 ResolvedMap resolvedMap = ResolveLinkedMap(mapIndex, image.Node, mapId, extractedImages);
                 Wz_Node miniMapNode = RequireSupportedMinimap(resolvedMap.Node, mapId);
@@ -182,13 +177,19 @@ namespace MapleStory.MachineLearningSampleGenerator
             }
 
             extractedImages.Add(linkedImage);
-            Exception extractError;
-            linkedImage.TryExtract(out extractError);
-            if (extractError != null)
-            {
-                throw extractError;
-            }
+            ExtractMapImage(linkedImage, link.Value);
             return new ResolvedMap(linkedImage.Node, link.Value);
+        }
+
+        internal static void ExtractMapImage(Wz_Image image, int mapId)
+        {
+            if (image.TryExtract(out Exception extractError))
+            {
+                return;
+            }
+
+            throw extractError ?? new InvalidDataException(
+                $"Failed to extract map {mapId.ToString(CultureInfo.InvariantCulture)} image '{image.Name}' from the loaded WZ files.");
         }
 
         internal static Wz_Node RequireSupportedMinimap(Wz_Node mapNode, int mapId)

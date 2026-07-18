@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using MapleStory.MachineLearningSampleGenerator;
 using WzComparerR2.WzLib;
 using Xunit;
@@ -57,6 +59,37 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 
             Assert.Single(mapIndex);
             Assert.Same(firstImage, mapIndex[40000]);
+        }
+
+        [Fact]
+        public void ExtractMapImage_RejectsUnidentifiedEncryption()
+        {
+            Wz_Image image = new UnextractableWzImage();
+            try
+            {
+                InvalidDataException exception = Assert.Throws<InvalidDataException>(
+                    () => MapGeometryExporter.ExtractMapImage(image, 410000520));
+
+                Assert.Contains("Failed to extract map 410000520", exception.Message);
+            }
+            finally
+            {
+                image.Unextract();
+            }
+        }
+
+        [Fact]
+        public void ExportMaps_CleansStagingDirectoryWhenContextConstructionFails()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            string output = Path.Combine(workspace.RootPath, "output");
+            MapGeometryExporter exporter = new MapGeometryExporter(workspace.RootPath, Encoding.UTF8);
+
+            Assert.Throws<ArgumentException>(() => exporter.ExportMaps(
+                new[] { new MapGeometryExporter.MapExportRequest("410000520", false) },
+                output));
+
+            Assert.Empty(Directory.EnumerateDirectories(workspace.RootPath, ".hecate-map-pack-*"));
         }
 
         [Fact]
@@ -125,6 +158,40 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 
             Assert.Single(mapNames);
             Assert.Equal("Victoria Road：Henesys", mapNames[100000000]);
+        }
+
+        private sealed class UnextractableWzImage : Wz_Image
+        {
+            public UnextractableWzImage()
+                : base("410000520.img", 2, 0, 0, 0, new InMemoryMapleStoryFile())
+            {
+            }
+
+            public override Stream OpenRead()
+            {
+                return new MemoryStream(new byte[] { 0x73, 0x00 });
+            }
+        }
+
+        private sealed class InMemoryMapleStoryFile : IMapleStoryFile
+        {
+            public InMemoryMapleStoryFile()
+            {
+                WzStructure = new Wz_Structure
+                {
+                    ImgCheckDisabled = true,
+                };
+            }
+
+            public Wz_Structure WzStructure { get; }
+
+            public Stream FileStream => Stream.Null;
+
+            public object ReadLock { get; } = new object();
+
+            public void Dispose()
+            {
+            }
         }
     }
 }
