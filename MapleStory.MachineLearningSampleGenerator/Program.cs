@@ -133,7 +133,11 @@ namespace MapleStory.MachineLearningSampleGenerator
         private static int RunGeometry(ResolvedRunConfig config)
         {
             MapGeometryExporter exporter = new MapGeometryExporter(config.MapleStoryPath, config.TextEncoding);
-            exporter.ExportMaps(config.Maps.Select(map => map.Id), config.OutputPath);
+            exporter.ExportMaps(
+                config.Maps.Select(map => new MapGeometryExporter.MapExportRequest(
+                    map.Id,
+                    map.SelectionSource == MapSelectionSource.AllMaps)),
+                config.OutputPath);
             return 0;
         }
 

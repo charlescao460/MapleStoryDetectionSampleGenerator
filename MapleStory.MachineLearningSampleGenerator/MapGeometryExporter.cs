@@ -33,23 +33,28 @@ namespace MapleStory.MachineLearningSampleGenerator
             _encoding = encoding ?? throw new ArgumentNullException(nameof(encoding));
         }
 
-        public void ExportMaps(IEnumerable<string> mapIds, string outputDirectory)
+        public void ExportMaps(IEnumerable<MapExportRequest> maps, string outputDirectory)
         {
-            if (mapIds == null)
+            if (maps == null)
             {
-                throw new ArgumentNullException(nameof(mapIds));
+                throw new ArgumentNullException(nameof(maps));
             }
             if (string.IsNullOrWhiteSpace(outputDirectory))
             {
                 throw new ArgumentException("Output directory cannot be empty.", nameof(outputDirectory));
             }
 
-            List<int> normalizedMapIds = mapIds
-                .Select(ParseMapId)
-                .Distinct()
-                .OrderBy(mapId => mapId)
+            List<NormalizedMapExportRequest> normalizedMaps = maps
+                .Select(request => new NormalizedMapExportRequest(
+                    ParseMapId(request.MapId),
+                    request.SkipUnsupported))
+                .GroupBy(request => request.MapId)
+                .Select(group => new NormalizedMapExportRequest(
+                    group.Key,
+                    group.All(request => request.SkipUnsupported)))
+                .OrderBy(request => request.MapId)
                 .ToList();
-            if (normalizedMapIds.Count == 0)
+            if (normalizedMaps.Count == 0)
             {
                 throw new InvalidOperationException("At least one map id is required.");
             }
@@ -66,9 +71,18 @@ namespace MapleStory.MachineLearningSampleGenerator
             try
             {
                 IReadOnlyDictionary<int, string> mapNames = LoadMapNames(context);
-                foreach (int mapId in normalizedMapIds)
+                IReadOnlyDictionary<int, Wz_Image> mapIndex = BuildMapIndex(context.WzStructure.WzNode);
+                foreach (NormalizedMapExportRequest map in normalizedMaps)
                 {
-                    ExportMap(context.WzStructure.WzNode, mapId, mapNames, stagingDirectory);
+                    try
+                    {
+                        ExportMap(mapIndex, map.MapId, mapNames, stagingDirectory);
+                    }
+                    catch (UnsupportedMapGeometryException ex) when (map.SkipUnsupported)
+                    {
+                        Console.Error.WriteLine(
+                            $"Skipped map {map.MapId.ToString(CultureInfo.InvariantCulture)}: {ex.Reason}.");
+                    }
                 }
 
                 IReadOnlyList<int> sourceVersions = context.WzStructure.wz_files
@@ -90,14 +104,13 @@ namespace MapleStory.MachineLearningSampleGenerator
         }
 
         private static void ExportMap(
-            Wz_Node root,
+            IReadOnlyDictionary<int, Wz_Image> mapIndex,
             int mapId,
             IReadOnlyDictionary<int, string> mapNames,
             string outputDirectory)
         {
             string rawMapId = mapId.ToString(CultureInfo.InvariantCulture);
-            Wz_Image image = WzTreeSearcher.SearchForMap(root, FormatWzMapId(mapId) + ".img");
-            if (image == null)
+            if (!mapIndex.TryGetValue(mapId, out Wz_Image image))
             {
                 throw new InvalidOperationException($"Map {rawMapId} was not found in the loaded WZ files.");
             }
@@ -115,18 +128,14 @@ namespace MapleStory.MachineLearningSampleGenerator
                     throw extractError;
                 }
 
-                ResolvedMap resolvedMap = ResolveLinkedMap(root, image.Node, mapId, extractedImages);
-                Wz_Node miniMapNode = resolvedMap.Node.Nodes["miniMap"];
-                if (miniMapNode == null)
-                {
-                    throw new InvalidOperationException($"Map {rawMapId} has no miniMap node.");
-                }
+                ResolvedMap resolvedMap = ResolveLinkedMap(mapIndex, image.Node, mapId, extractedImages);
+                Wz_Node miniMapNode = RequireSupportedMinimap(resolvedMap.Node, mapId);
 
                 string imageName = rawMapId + ".png";
                 SaveMinimapImage(
                     miniMapNode,
                     Path.Combine(outputDirectory, imageName),
-                    rawMapId,
+                    mapId,
                     extractedImages);
                 MapGeometryPayload payload = new MapGeometryPayload
                 {
@@ -156,7 +165,7 @@ namespace MapleStory.MachineLearningSampleGenerator
         }
 
         private static ResolvedMap ResolveLinkedMap(
-            Wz_Node root,
+            IReadOnlyDictionary<int, Wz_Image> mapIndex,
             Wz_Node mapNode,
             int mapId,
             ISet<Wz_Image> extractedImages)
@@ -167,8 +176,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                 return new ResolvedMap(mapNode, mapId);
             }
 
-            Wz_Image linkedImage = WzTreeSearcher.SearchForMap(root, FormatWzMapId(link.Value) + ".img");
-            if (linkedImage == null)
+            if (!mapIndex.TryGetValue(link.Value, out Wz_Image linkedImage))
             {
                 throw new InvalidOperationException($"Linked map {link.Value} was not found in the loaded WZ files.");
             }
@@ -181,6 +189,40 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw extractError;
             }
             return new ResolvedMap(linkedImage.Node, link.Value);
+        }
+
+        internal static Wz_Node RequireSupportedMinimap(Wz_Node mapNode, int mapId)
+        {
+            Wz_Node miniMapNode = mapNode?.Nodes["miniMap"];
+            if (miniMapNode == null)
+            {
+                throw new UnsupportedMapGeometryException(mapId, "has no miniMap node");
+            }
+
+            if (miniMapNode.Nodes["canvas"] == null)
+            {
+                throw new UnsupportedMapGeometryException(mapId, "has no minimap canvas image");
+            }
+
+            List<string> additionalCanvases = miniMapNode.Nodes
+                .Select(node => new
+                {
+                    Node = node,
+                    Index = GetAdditionalCanvasIndex(node.Text),
+                })
+                .Where(item => item.Index.HasValue)
+                .OrderBy(item => item.Index.Value)
+                .ThenBy(item => item.Node.Text, StringComparer.Ordinal)
+                .Select(item => item.Node.Text)
+                .ToList();
+            if (additionalCanvases.Count > 0)
+            {
+                throw new UnsupportedMapGeometryException(
+                    mapId,
+                    $"has multiple minimap canvases ({string.Join(", ", additionalCanvases)})");
+            }
+
+            return miniMapNode;
         }
 
         private static MinimapPayload ReadMinimap(Wz_Node miniMapNode, string imageName)
@@ -199,10 +241,10 @@ namespace MapleStory.MachineLearningSampleGenerator
         private static void SaveMinimapImage(
             Wz_Node miniMapNode,
             string path,
-            string mapId,
+            int mapId,
             ISet<Wz_Image> extractedImages)
         {
-            Wz_Node canvasNode = miniMapNode.FindNodeByPath("canvas")?.GetLinkedSourceNode(PluginManager.FindWz);
+            Wz_Node canvasNode = miniMapNode.FindNodeByPath("canvas").GetLinkedSourceNode(PluginManager.FindWz);
             Wz_Image canvasImage = canvasNode?.GetNodeWzImage();
             if (canvasImage != null)
             {
@@ -212,7 +254,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             Wz_Png png = canvasNode.GetValueEx<Wz_Png>(null);
             if (png == null)
             {
-                throw new InvalidOperationException($"Map {mapId} has no minimap canvas image.");
+                throw new UnsupportedMapGeometryException(mapId, "has no minimap canvas image");
             }
 
             using var bitmap = png.ExtractPng();
@@ -239,6 +281,37 @@ namespace MapleStory.MachineLearningSampleGenerator
             return mapId.ToString("D9", CultureInfo.InvariantCulture);
         }
 
+        internal static IReadOnlyDictionary<int, Wz_Image> BuildMapIndex(IEnumerable<Wz_Node> mapRoots)
+        {
+            if (mapRoots == null)
+            {
+                throw new ArgumentNullException(nameof(mapRoots));
+            }
+
+            Dictionary<int, Wz_Image> mapIndex = new Dictionary<int, Wz_Image>();
+            foreach (Wz_Node mapRoot in mapRoots)
+            {
+                foreach (Wz_Node node in EnumerateBreadthFirst(mapRoot))
+                {
+                    if (TryParseMapImageId(node.Text, out int mapId) &&
+                        node.Value is Wz_Image image &&
+                        !mapIndex.ContainsKey(mapId))
+                    {
+                        mapIndex.Add(mapId, image);
+                    }
+                }
+            }
+
+            return mapIndex;
+        }
+
+        private static IReadOnlyDictionary<int, Wz_Image> BuildMapIndex(Wz_Node root)
+        {
+            IEnumerable<Wz_Node> mapRoots = root.Nodes
+                .Where(node => node.GetNodeWzFile()?.Type == Wz_Type.Map);
+            return BuildMapIndex(mapRoots);
+        }
+
         private static IReadOnlyDictionary<int, string> LoadMapNames(WzContext context)
         {
             Wz_File stringWz = context.WzStructure.wz_files.FirstOrDefault(file => file.Type == Wz_Type.String);
@@ -247,13 +320,56 @@ namespace MapleStory.MachineLearningSampleGenerator
                 return new Dictionary<int, string>();
             }
 
-            StringLinker linker = new StringLinker();
-            if (!linker.Load(stringWz))
+            Wz_Image mapImage = stringWz.Node?.Nodes["Map.img"]?.Value as Wz_Image;
+            if (mapImage == null)
             {
                 return new Dictionary<int, string>();
             }
 
-            return linker.StringMap.ToDictionary(pair => pair.Key, pair => pair.Value.Name);
+            try
+            {
+                if (!mapImage.TryExtract())
+                {
+                    return new Dictionary<int, string>();
+                }
+
+                return ReadMapNames(mapImage.Node);
+            }
+            finally
+            {
+                mapImage.Unextract();
+            }
+        }
+
+        internal static IReadOnlyDictionary<int, string> ReadMapNames(Wz_Node mapStringRoot)
+        {
+            Dictionary<int, string> mapNames = new Dictionary<int, string>();
+            if (mapStringRoot == null)
+            {
+                return mapNames;
+            }
+
+            foreach (Wz_Node categoryNode in mapStringRoot.Nodes)
+            {
+                foreach (Wz_Node mapNode in categoryNode.Nodes)
+                {
+                    if (!int.TryParse(
+                            mapNode.Text,
+                            NumberStyles.None,
+                            CultureInfo.InvariantCulture,
+                            out int mapId) ||
+                        mapNode.ResolveUol() is not Wz_Node resolvedMapNode)
+                    {
+                        continue;
+                    }
+
+                    string streetName = ReadString(resolvedMapNode, "streetName");
+                    string mapName = ReadString(resolvedMapNode, "mapName");
+                    mapNames[mapId] = $"{streetName}：{mapName}";
+                }
+            }
+
+            return mapNames;
         }
 
         internal static List<PlatformPayload> ReadPlatforms(Wz_Node footholdRoot)
@@ -404,9 +520,112 @@ namespace MapleStory.MachineLearningSampleGenerator
             }
         }
 
+        private static IEnumerable<Wz_Node> EnumerateBreadthFirst(Wz_Node root)
+        {
+            Queue<Wz_Node> queue = new Queue<Wz_Node>();
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                Wz_Node node = queue.Dequeue();
+                yield return node;
+
+                foreach (Wz_Node child in node.Nodes)
+                {
+                    queue.Enqueue(child);
+                }
+            }
+        }
+
+        private static bool TryParseMapImageId(string nodeText, out int mapId)
+        {
+            mapId = 0;
+            if (string.IsNullOrWhiteSpace(nodeText) ||
+                !nodeText.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string rawMapId = nodeText.Substring(0, nodeText.Length - ".img".Length);
+            return int.TryParse(
+                    rawMapId,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out mapId) &&
+                mapId <= 999999999;
+        }
+
+        private static int? GetAdditionalCanvasIndex(string nodeText)
+        {
+            const string prefix = "canvas";
+            if (string.IsNullOrEmpty(nodeText) ||
+                !nodeText.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            string suffix = nodeText.Substring(prefix.Length);
+            if (!int.TryParse(
+                    suffix,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out int index) ||
+                index <= 0 ||
+                !string.Equals(suffix, index.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return index;
+        }
+
+        private static string ReadString(Wz_Node node, string childName)
+        {
+            Wz_Node child = node.FindNodeByPath(childName);
+            return child == null
+                ? null
+                : Convert.ToString(child.Value, CultureInfo.InvariantCulture);
+        }
+
         private static bool HasChildren(Wz_Node node, params string[] keys)
         {
             return node != null && keys.All(key => node.Nodes[key] != null);
+        }
+
+        internal readonly struct MapExportRequest
+        {
+            public MapExportRequest(string mapId, bool skipUnsupported)
+            {
+                MapId = mapId;
+                SkipUnsupported = skipUnsupported;
+            }
+
+            public string MapId { get; }
+
+            public bool SkipUnsupported { get; }
+        }
+
+        private readonly struct NormalizedMapExportRequest
+        {
+            public NormalizedMapExportRequest(int mapId, bool skipUnsupported)
+            {
+                MapId = mapId;
+                SkipUnsupported = skipUnsupported;
+            }
+
+            public int MapId { get; }
+
+            public bool SkipUnsupported { get; }
+        }
+
+        internal sealed class UnsupportedMapGeometryException : InvalidOperationException
+        {
+            public UnsupportedMapGeometryException(int mapId, string reason)
+                : base(string.Format(CultureInfo.InvariantCulture, "Map {0} {1}.", mapId, reason))
+            {
+                Reason = reason;
+            }
+
+            public string Reason { get; }
         }
 
         private sealed class ResolvedMap

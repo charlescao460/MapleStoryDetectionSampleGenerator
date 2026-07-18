@@ -160,7 +160,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                     id,
                     defaultSampling.Count,
                     defaultSampling.IntervalMs,
-                    Array.Empty<PostProcessorConfig>()));
+                    Array.Empty<PostProcessorConfig>(),
+                    MapSelectionSource.Random));
             }
         }
 
@@ -183,7 +184,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                     id,
                     defaultSampling.Count,
                     defaultSampling.IntervalMs,
-                    defaultPostProcessors));
+                    defaultPostProcessors,
+                    MapSelectionSource.AllMaps));
             }
         }
 
