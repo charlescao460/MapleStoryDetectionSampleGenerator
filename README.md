@@ -230,9 +230,9 @@ The COCO json is defined as following:
 Note that `segmentation` covers the area as the same as `bbox` does. No segmentation or masked implemented .
 
 ## Geometry Export
-Hecate map geometry can be exported directly from WZ data without running the renderer. The exporter writes one `{map_id}.json` plus one `{map_id}.png` minimap canvas per configured map. The JSON uses Hecate geometry schema v2, including horizontal footholds, `ladderRope` ropes/ladders, and in-map portal pairs.
+Hecate map geometry can be exported directly from WZ data without running the renderer. The exporter derives one geometry JSON file plus one PNG minimap canvas per configured map and publishes both under content-addressed filenames. The JSON uses Hecate geometry schema v2, including horizontal footholds, `ladderRope` ropes/ladders, and in-map portal pairs.
 
-The output is a distributable map pack, not a runtime dependency on this repository. A deterministic `map-pack.json` manifest pins every geometry and minimap file by SHA-256, records the producer and WZ versions, and is published only after all requested maps succeed. Hecate bundles these generated files in its own application resources. Existing Hecate-owned `*.alignment.json` files in the output directory are preserved.
+The output is a distributable map pack, not a runtime dependency on this repository. A deterministic `map-pack.json` manifest references immutable, content-addressed geometry and minimap files, pins them by SHA-256, records the producer and WZ versions, and is atomically replaced only after all requested maps succeed. Hecate bundles these generated files in its own application resources. Existing Hecate-owned `*.alignment.json` files in the output directory are preserved.
 
 ```yaml
 mode: geometry

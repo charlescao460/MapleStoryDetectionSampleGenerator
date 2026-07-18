@@ -96,7 +96,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             string outputDirectory)
         {
             string rawMapId = mapId.ToString(CultureInfo.InvariantCulture);
-            Wz_Image image = WzTreeSearcher.SearchForMap(root, rawMapId + ".img");
+            Wz_Image image = WzTreeSearcher.SearchForMap(root, FormatWzMapId(mapId) + ".img");
             if (image == null)
             {
                 throw new InvalidOperationException($"Map {rawMapId} was not found in the loaded WZ files.");
@@ -109,15 +109,15 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw extractError;
             }
 
-            Wz_Node mapNode = ResolveLinkedMapNode(root, image.Node) ?? image.Node;
-            Wz_Node miniMapNode = mapNode.Nodes["miniMap"];
+            ResolvedMap resolvedMap = ResolveLinkedMap(root, image.Node, mapId);
+            Wz_Node miniMapNode = resolvedMap.Node.Nodes["miniMap"];
             if (miniMapNode == null)
             {
                 throw new InvalidOperationException($"Map {rawMapId} has no miniMap node.");
             }
 
             string imageName = rawMapId + ".png";
-            bool hasMinimapImage = SaveMinimapImage(miniMapNode, Path.Combine(outputDirectory, imageName));
+            SaveMinimapImage(miniMapNode, Path.Combine(outputDirectory, imageName), rawMapId);
             MapGeometryPayload payload = new MapGeometryPayload
             {
                 SchemaVersion = SchemaVersion,
@@ -125,10 +125,10 @@ namespace MapleStory.MachineLearningSampleGenerator
                 MapName = mapNames.TryGetValue(mapId, out string mapName) && !string.IsNullOrWhiteSpace(mapName)
                     ? mapName
                     : rawMapId,
-                Minimap = ReadMinimap(miniMapNode, hasMinimapImage ? imageName : null),
-                Platforms = ReadPlatforms(mapNode.Nodes["foothold"]),
-                Ropes = ReadRopes(mapNode.Nodes["ladderRope"]),
-                Portals = ReadPortals(mapNode.Nodes["portal"], mapId),
+                Minimap = ReadMinimap(miniMapNode, imageName),
+                Platforms = ReadPlatforms(resolvedMap.Node.Nodes["foothold"]),
+                Ropes = ReadRopes(resolvedMap.Node.Nodes["ladderRope"]),
+                Portals = ReadPortals(resolvedMap.Node.Nodes["portal"], resolvedMap.MapId),
             };
 
             string json = JsonSerializer.Serialize(payload, JsonOptions) + "\n";
@@ -137,22 +137,22 @@ namespace MapleStory.MachineLearningSampleGenerator
                 $"Exported {rawMapId}: {payload.Platforms.Count} platforms, {payload.Ropes.Count} ropes/ladders, {payload.Portals.Count} portals");
         }
 
-        private static Wz_Node ResolveLinkedMapNode(Wz_Node root, Wz_Node mapNode)
+        private static ResolvedMap ResolveLinkedMap(Wz_Node root, Wz_Node mapNode, int mapId)
         {
             int? link = mapNode.Nodes["info"]?.Nodes["link"].GetValueEx<int>();
             if (!link.HasValue)
             {
-                return mapNode;
+                return new ResolvedMap(mapNode, mapId);
             }
 
-            Wz_Image linked = WzTreeSearcher.SearchForMap(root, link.Value.ToString(CultureInfo.InvariantCulture) + ".img");
+            Wz_Image linked = WzTreeSearcher.SearchForMap(root, FormatWzMapId(link.Value) + ".img");
             Exception extractError;
             linked.TryExtract(out extractError);
             if (extractError != null)
             {
                 throw extractError;
             }
-            return linked.Node;
+            return new ResolvedMap(linked.Node, link.Value);
         }
 
         private static MinimapPayload ReadMinimap(Wz_Node miniMapNode, string imageName)
@@ -168,27 +168,37 @@ namespace MapleStory.MachineLearningSampleGenerator
             };
         }
 
-        private static bool SaveMinimapImage(Wz_Node miniMapNode, string path)
+        private static void SaveMinimapImage(Wz_Node miniMapNode, string path, string mapId)
         {
             Wz_Node canvasNode = miniMapNode.FindNodeByPath("canvas")?.GetLinkedSourceNode(PluginManager.FindWz);
             Wz_Png png = canvasNode.GetValueEx<Wz_Png>(null);
             if (png == null)
             {
-                return false;
+                throw new InvalidOperationException($"Map {mapId} has no minimap canvas image.");
             }
 
             using var bitmap = png.ExtractPng();
             bitmap.Save(path, ImageFormat.Png);
-            return true;
         }
 
         private static int ParseMapId(string rawMapId)
         {
-            if (!int.TryParse(rawMapId, NumberStyles.None, CultureInfo.InvariantCulture, out int mapId))
+            if (!int.TryParse(rawMapId, NumberStyles.None, CultureInfo.InvariantCulture, out int mapId) ||
+                mapId > 999999999)
             {
-                throw new InvalidOperationException($"Map id '{rawMapId}' must be numeric.");
+                throw new InvalidOperationException($"Map id '{rawMapId}' must be numeric with at most nine decimal digits.");
             }
             return mapId;
+        }
+
+        internal static string FormatWzMapId(int mapId)
+        {
+            if (mapId < 0 || mapId > 999999999)
+            {
+                throw new ArgumentOutOfRangeException(nameof(mapId));
+            }
+
+            return mapId.ToString("D9", CultureInfo.InvariantCulture);
         }
 
         private static IReadOnlyDictionary<int, string> LoadMapNames(WzContext context)
@@ -359,6 +369,19 @@ namespace MapleStory.MachineLearningSampleGenerator
         private static bool HasChildren(Wz_Node node, params string[] keys)
         {
             return node != null && keys.All(key => node.Nodes[key] != null);
+        }
+
+        private sealed class ResolvedMap
+        {
+            public ResolvedMap(Wz_Node node, int mapId)
+            {
+                Node = node;
+                MapId = mapId;
+            }
+
+            public Wz_Node Node { get; }
+
+            public int MapId { get; }
         }
 
         private sealed class MapGeometryPayload

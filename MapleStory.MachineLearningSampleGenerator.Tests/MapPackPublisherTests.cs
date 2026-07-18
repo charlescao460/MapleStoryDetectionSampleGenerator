@@ -30,16 +30,25 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 
             JsonElement.ArrayEnumerator maps = root.GetProperty("maps").EnumerateArray();
             Assert.True(maps.MoveNext());
-            Assert.Equal(410000520, maps.Current.GetProperty("map_id").GetInt32());
+            JsonElement firstMap = maps.Current;
+            Assert.Equal(410000520, firstMap.GetProperty("map_id").GetInt32());
+            string geometryFile = firstMap.GetProperty("geometry_file").GetString();
+            string minimapFile = firstMap.GetProperty("minimap_file").GetString();
+            Assert.Matches("^410000520\\.[0-9a-f]{64}\\.json$", geometryFile);
+            Assert.Matches("^410000520\\.[0-9a-f]{64}\\.png$", minimapFile);
             Assert.Equal(
-                MapPackPublisher.Sha256(Path.Combine(output, "410000520.json")),
-                maps.Current.GetProperty("geometry_sha256").GetString());
+                MapPackPublisher.Sha256(Path.Combine(output, geometryFile)),
+                firstMap.GetProperty("geometry_sha256").GetString());
             Assert.Equal(
-                MapPackPublisher.Sha256(Path.Combine(output, "410000520.png")),
-                maps.Current.GetProperty("minimap_sha256").GetString());
+                MapPackPublisher.Sha256(Path.Combine(output, minimapFile)),
+                firstMap.GetProperty("minimap_sha256").GetString());
+            using JsonDocument geometry = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, geometryFile)));
+            Assert.Equal(minimapFile, geometry.RootElement.GetProperty("minimap").GetProperty("image").GetString());
             Assert.True(maps.MoveNext());
             Assert.Equal(410007014, maps.Current.GetProperty("map_id").GetInt32());
             Assert.False(maps.MoveNext());
+            Assert.False(File.Exists(Path.Combine(output, "410000520.json")));
+            Assert.False(File.Exists(Path.Combine(output, "410000520.png")));
             Assert.True(File.Exists(Path.Combine(output, "410000520.alignment.json")));
         }
 
@@ -75,12 +84,69 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             Assert.False(File.Exists(Path.Combine(output, MapPackPublisher.ManifestFileName)));
         }
 
+        [Fact]
+        public void Publish_UpdateKeepsPriorManifestAssetsImmutable()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            string staging = workspace.CreateDirectory("staging");
+            string output = workspace.CreateDirectory("output");
+            WriteMap(workspace, "staging", 410000520, "First", true);
+            MapPackPublisher.Publish(staging, output, new[] { 300 }, "2.1.0");
+
+            string manifestPath = Path.Combine(output, MapPackPublisher.ManifestFileName);
+            (string firstGeometry, string firstMinimap) = ReadAssetNames(manifestPath);
+            byte[] firstGeometryContent = File.ReadAllBytes(Path.Combine(output, firstGeometry));
+            byte[] firstMinimapContent = File.ReadAllBytes(Path.Combine(output, firstMinimap));
+
+            WriteMap(workspace, "staging", 410000520, "Second", true, "updated-png");
+            MapPackPublisher.Publish(staging, output, new[] { 300 }, "2.1.0");
+
+            (string secondGeometry, string secondMinimap) = ReadAssetNames(manifestPath);
+            Assert.NotEqual(firstGeometry, secondGeometry);
+            Assert.NotEqual(firstMinimap, secondMinimap);
+            Assert.Equal(firstGeometryContent, File.ReadAllBytes(Path.Combine(output, firstGeometry)));
+            Assert.Equal(firstMinimapContent, File.ReadAllBytes(Path.Combine(output, firstMinimap)));
+            Assert.True(File.Exists(Path.Combine(output, secondGeometry)));
+            Assert.True(File.Exists(Path.Combine(output, secondMinimap)));
+        }
+
+        [Fact]
+        public void Publish_MissingMinimapReferenceDoesNotReplaceExistingManifest()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            string staging = workspace.CreateDirectory("staging");
+            string output = workspace.CreateDirectory("output");
+            WriteMap(workspace, "staging", 410000520, "Map", true);
+            MapPackPublisher.Publish(staging, output, new[] { 300 }, "2.1.0");
+            string manifestPath = Path.Combine(output, MapPackPublisher.ManifestFileName);
+            byte[] originalManifest = File.ReadAllBytes(manifestPath);
+            workspace.CreateFile(
+                "staging/410000520.json",
+                "{\"schema_version\":2,\"map_id\":410000520,\"minimap\":{},\"platforms\":[],\"ropes\":[],\"portals\":[]}");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+                () => MapPackPublisher.Publish(staging, output, Array.Empty<int>(), "2.1.0"));
+
+            Assert.Contains("must reference a minimap image", exception.Message);
+            Assert.Equal(originalManifest, File.ReadAllBytes(manifestPath));
+        }
+
+        private static (string Geometry, string Minimap) ReadAssetNames(string manifestPath)
+        {
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            JsonElement map = document.RootElement.GetProperty("maps")[0];
+            return (
+                map.GetProperty("geometry_file").GetString(),
+                map.GetProperty("minimap_file").GetString());
+        }
+
         private static void WriteMap(
             TestWorkspace workspace,
             string directory,
             int mapId,
             string mapName,
-            bool writeImage)
+            bool writeImage,
+            string imageContent = null)
         {
             string imageName = mapId + ".png";
             string geometry =
@@ -91,7 +157,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             workspace.CreateFile(Path.Combine(directory, mapId + ".json"), geometry);
             if (writeImage)
             {
-                workspace.CreateFile(Path.Combine(directory, imageName), "png-bytes-" + mapId);
+                workspace.CreateFile(Path.Combine(directory, imageName), imageContent ?? "png-bytes-" + mapId);
             }
         }
     }
