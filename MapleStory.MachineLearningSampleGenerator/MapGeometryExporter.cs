@@ -102,7 +102,10 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new InvalidOperationException($"Map {rawMapId} was not found in the loaded WZ files.");
             }
 
-            Wz_Image linkedImage = null;
+            HashSet<Wz_Image> extractedImages = new HashSet<Wz_Image>(ReferenceEqualityComparer.Instance)
+            {
+                image,
+            };
             try
             {
                 Exception extractError;
@@ -112,7 +115,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                     throw extractError;
                 }
 
-                ResolvedMap resolvedMap = ResolveLinkedMap(root, image.Node, mapId, out linkedImage);
+                ResolvedMap resolvedMap = ResolveLinkedMap(root, image.Node, mapId, extractedImages);
                 Wz_Node miniMapNode = resolvedMap.Node.Nodes["miniMap"];
                 if (miniMapNode == null)
                 {
@@ -120,7 +123,11 @@ namespace MapleStory.MachineLearningSampleGenerator
                 }
 
                 string imageName = rawMapId + ".png";
-                SaveMinimapImage(miniMapNode, Path.Combine(outputDirectory, imageName), rawMapId);
+                SaveMinimapImage(
+                    miniMapNode,
+                    Path.Combine(outputDirectory, imageName),
+                    rawMapId,
+                    extractedImages);
                 MapGeometryPayload payload = new MapGeometryPayload
                 {
                     SchemaVersion = SchemaVersion,
@@ -141,30 +148,32 @@ namespace MapleStory.MachineLearningSampleGenerator
             }
             finally
             {
-                try
+                foreach (Wz_Image extractedImage in extractedImages)
                 {
-                    if (linkedImage != null && !ReferenceEquals(linkedImage, image))
-                    {
-                        linkedImage.Unextract();
-                    }
-                }
-                finally
-                {
-                    image.Unextract();
+                    extractedImage.Unextract();
                 }
             }
         }
 
-        private static ResolvedMap ResolveLinkedMap(Wz_Node root, Wz_Node mapNode, int mapId, out Wz_Image linkedImage)
+        private static ResolvedMap ResolveLinkedMap(
+            Wz_Node root,
+            Wz_Node mapNode,
+            int mapId,
+            ISet<Wz_Image> extractedImages)
         {
-            linkedImage = null;
             int? link = mapNode.Nodes["info"]?.Nodes["link"].GetValueEx<int>();
             if (!link.HasValue)
             {
                 return new ResolvedMap(mapNode, mapId);
             }
 
-            linkedImage = WzTreeSearcher.SearchForMap(root, FormatWzMapId(link.Value) + ".img");
+            Wz_Image linkedImage = WzTreeSearcher.SearchForMap(root, FormatWzMapId(link.Value) + ".img");
+            if (linkedImage == null)
+            {
+                throw new InvalidOperationException($"Linked map {link.Value} was not found in the loaded WZ files.");
+            }
+
+            extractedImages.Add(linkedImage);
             Exception extractError;
             linkedImage.TryExtract(out extractError);
             if (extractError != null)
@@ -187,9 +196,19 @@ namespace MapleStory.MachineLearningSampleGenerator
             };
         }
 
-        private static void SaveMinimapImage(Wz_Node miniMapNode, string path, string mapId)
+        private static void SaveMinimapImage(
+            Wz_Node miniMapNode,
+            string path,
+            string mapId,
+            ISet<Wz_Image> extractedImages)
         {
             Wz_Node canvasNode = miniMapNode.FindNodeByPath("canvas")?.GetLinkedSourceNode(PluginManager.FindWz);
+            Wz_Image canvasImage = canvasNode?.GetNodeWzImage();
+            if (canvasImage != null)
+            {
+                extractedImages.Add(canvasImage);
+            }
+
             Wz_Png png = canvasNode.GetValueEx<Wz_Png>(null);
             if (png == null)
             {

@@ -37,17 +37,15 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new ArgumentException("Output directory cannot be empty.", nameof(outputDirectory));
             }
 
-            List<StagedMap> stagedMaps = Directory.EnumerateFiles(stagingDirectory, "*.json")
-                .Select(CreateStagedMap)
-                .OrderBy(map => map.Entry.MapId)
-                .ToList();
-            if (stagedMaps.Count == 0)
+            List<MapPackEntry> mapEntries = new List<MapPackEntry>();
+            HashSet<int> mapIds = new HashSet<int>();
+            foreach (string geometryPath in Directory.EnumerateFiles(stagingDirectory, "*.json"))
+            {
+                mapEntries.Add(PublishStagedMap(geometryPath, outputDirectory, mapIds));
+            }
+            if (mapEntries.Count == 0)
             {
                 throw new InvalidOperationException("A map pack must contain at least one geometry file.");
-            }
-            if (stagedMaps.Select(map => map.Entry.MapId).Distinct().Count() != stagedMaps.Count)
-            {
-                throw new InvalidOperationException("A map pack cannot contain duplicate map ids.");
             }
 
             MapPackManifest manifest = new MapPackManifest
@@ -67,23 +65,8 @@ namespace MapleStory.MachineLearningSampleGenerator
                         .OrderBy(version => version)
                         .ToList(),
                 },
-                Maps = stagedMaps.Select(map => map.Entry).ToList(),
+                Maps = mapEntries.OrderBy(map => map.MapId).ToList(),
             };
-
-            Directory.CreateDirectory(outputDirectory);
-            foreach (StagedMap map in stagedMaps)
-            {
-                PublishAsset(
-                    outputDirectory,
-                    map.Entry.GeometryFile,
-                    map.Entry.GeometrySha256,
-                    pending => File.WriteAllBytes(pending, map.GeometryContent));
-                PublishAsset(
-                    outputDirectory,
-                    map.Entry.MinimapFile,
-                    map.Entry.MinimapSha256,
-                    pending => File.Copy(map.MinimapSourcePath, pending));
-            }
 
             string manifestJson = JsonSerializer.Serialize(manifest, JsonOptions) + "\n";
             PublishManifest(outputDirectory, manifestJson);
@@ -152,6 +135,31 @@ namespace MapleStory.MachineLearningSampleGenerator
                 GeometryContent = geometryContent,
                 MinimapSourcePath = minimapPath,
             };
+        }
+
+        private static MapPackEntry PublishStagedMap(
+            string geometryPath,
+            string outputDirectory,
+            ISet<int> mapIds)
+        {
+            StagedMap map = CreateStagedMap(geometryPath);
+            if (!mapIds.Add(map.Entry.MapId))
+            {
+                throw new InvalidOperationException("A map pack cannot contain duplicate map ids.");
+            }
+
+            Directory.CreateDirectory(outputDirectory);
+            PublishAsset(
+                outputDirectory,
+                map.Entry.GeometryFile,
+                map.Entry.GeometrySha256,
+                pending => File.WriteAllBytes(pending, map.GeometryContent));
+            PublishAsset(
+                outputDirectory,
+                map.Entry.MinimapFile,
+                map.Entry.MinimapSha256,
+                pending => File.Copy(map.MinimapSourcePath, pending));
+            return map.Entry;
         }
 
         private static string ContentAddressedFileName(int mapId, string hash, string extension)
