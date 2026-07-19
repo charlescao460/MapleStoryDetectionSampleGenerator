@@ -543,11 +543,22 @@ namespace MapleStory.MachineLearningSampleGenerator
                 return new Dictionary<int, string>();
             }
 
+            return ExtractMapNames(mapImage);
+        }
+
+        internal static IReadOnlyDictionary<int, string> ExtractMapNames(Wz_Image mapImage)
+        {
+            if (mapImage == null)
+            {
+                throw new ArgumentNullException(nameof(mapImage));
+            }
+
             try
             {
-                if (!mapImage.TryExtract())
+                if (!mapImage.TryExtract(out Exception extractError))
                 {
-                    return new Dictionary<int, string>();
+                    throw extractError ?? new InvalidDataException(
+                        $"Failed to extract String.wz image '{mapImage.Name}'.");
                 }
 
                 return ReadMapNames(mapImage.Node);

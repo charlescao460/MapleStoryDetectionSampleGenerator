@@ -118,6 +118,28 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         }
 
         [Fact]
+        public void ExtractMapNames_PreservesChecksumFailure()
+        {
+            Wz_Image image = new InvalidChecksumWzImage();
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => MapGeometryExporter.ExtractMapNames(image));
+
+            Assert.Equal("checksum error", exception.Message);
+        }
+
+        [Fact]
+        public void ExtractMapNames_RejectsUnidentifiedEncryption()
+        {
+            Wz_Image image = new UnextractableWzImage("Map.img");
+
+            InvalidDataException exception = Assert.Throws<InvalidDataException>(
+                () => MapGeometryExporter.ExtractMapNames(image));
+
+            Assert.Equal("Failed to extract String.wz image 'Map.img'.", exception.Message);
+        }
+
+        [Fact]
         public void ExportMaps_CleansStagingDirectoryWhenContextConstructionFails()
         {
             using TestWorkspace workspace = new TestWorkspace();
@@ -385,8 +407,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 
         private sealed class UnextractableWzImage : Wz_Image
         {
-            public UnextractableWzImage()
-                : base("410000520.img", 2, 0, 0, 0, new InMemoryMapleStoryFile())
+            public UnextractableWzImage(string name = "410000520.img")
+                : base(name, 2, 0, 0, 0, new InMemoryMapleStoryFile())
             {
             }
 
