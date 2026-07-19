@@ -11,23 +11,6 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 {
     public class MapGeometryExporterTests
     {
-        [Theory]
-        [InlineData(40000, "000040000")]
-        [InlineData(410000520, "410000520")]
-        [InlineData(0, "000000000")]
-        public void FormatWzMapId_UsesCanonicalNineDigitName(int mapId, string expected)
-        {
-            Assert.Equal(expected, MapGeometryExporter.FormatWzMapId(mapId));
-        }
-
-        [Theory]
-        [InlineData(-1)]
-        [InlineData(1000000000)]
-        public void FormatWzMapId_RejectsIdsOutsideNineDigitRange(int mapId)
-        {
-            Assert.Throws<ArgumentOutOfRangeException>(() => MapGeometryExporter.FormatWzMapId(mapId));
-        }
-
         [Fact]
         public void ReadPlatforms_NormalizesReversedHorizontalEndpoints()
         {
@@ -67,17 +50,13 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         {
             IReadOnlyList<MapGeometryExporter.NormalizedMapExportRequest> maps =
                 MapGeometryExporter.NormalizeMapRequests(
-                    new[]
-                    {
-                        new MapGeometryExporter.MapExportRequest("200000000", false),
-                        new MapGeometryExporter.MapExportRequest("300000000", true),
-                    },
+                    new[] { "200000000", "300000000" },
                     new[] { 300000000, 100000000, 200000000 });
 
             Assert.Equal(new[] { 100000000, 200000000, 300000000 }, maps.Select(map => map.MapId));
             Assert.True(maps[0].SkipUnsupported);
             Assert.False(maps[1].SkipUnsupported);
-            Assert.True(maps[2].SkipUnsupported);
+            Assert.False(maps[2].SkipUnsupported);
         }
 
         [Fact]
@@ -128,7 +107,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             MapGeometryExporter exporter = new MapGeometryExporter(workspace.RootPath, Encoding.UTF8);
 
             Assert.Throws<ArgumentException>(() => exporter.ExportMaps(
-                new[] { new MapGeometryExporter.MapExportRequest("410000520", false) },
+                new[] { "410000520" },
                 output));
 
             Assert.Empty(Directory.EnumerateDirectories(workspace.RootPath, ".hecate-map-pack-*"));
@@ -147,7 +126,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
                 errorWriter);
 
             Assert.Throws<ArgumentException>(() => exporter.ExportMaps(
-                new[] { new MapGeometryExporter.MapExportRequest("410000520", false) },
+                new[] { "410000520" },
                 output));
 
             Assert.Contains("cleanup failed", errorWriter.ToString());
@@ -237,6 +216,50 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 
             Assert.Single(mapNames);
             Assert.Equal("Victoria Road：Henesys", mapNames[100000000]);
+        }
+
+        [Theory]
+        [InlineData("Victoria Road", null, "Victoria Road")]
+        [InlineData(null, "Henesys", "Henesys")]
+        [InlineData(null, null, "100000000")]
+        [InlineData("", " ", "100000000")]
+        public void ReadMapNames_UsesAvailableComponentsOrNumericId(
+            string streetName,
+            string mapName,
+            string expected)
+        {
+            Wz_Node mapStringRoot = new Wz_Node("Map.img");
+            Wz_Node map = mapStringRoot.Nodes.Add("MapleRoad").Nodes.Add("100000000");
+            if (streetName != null)
+            {
+                map.Nodes.Add("streetName").Value = streetName;
+            }
+            if (mapName != null)
+            {
+                map.Nodes.Add("mapName").Value = mapName;
+            }
+
+            IReadOnlyDictionary<int, string> mapNames = MapGeometryExporter.ReadMapNames(mapStringRoot);
+
+            Assert.Equal(expected, mapNames[100000000]);
+        }
+
+        [Fact]
+        public void ExportRequestedMap_AddsMapContextAndPreservesFailure()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            Wz_Image image = new UnextractableWzImage();
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                MapGeometryExporter.ExportRequestedMap(
+                    new Dictionary<int, Wz_Image> { [410000520] = image },
+                    new MapGeometryExporter.NormalizedMapExportRequest(410000520, false),
+                    new Dictionary<int, string>(),
+                    workspace.RootPath,
+                    TextWriter.Null));
+
+            Assert.StartsWith("Failed to export map 410000520:", exception.Message);
+            Assert.IsType<InvalidDataException>(exception.InnerException);
         }
 
         private sealed class UnextractableWzImage : Wz_Image

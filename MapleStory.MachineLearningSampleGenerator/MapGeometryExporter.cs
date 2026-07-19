@@ -47,22 +47,22 @@ namespace MapleStory.MachineLearningSampleGenerator
         }
 
         public void ExportMaps(
-            IEnumerable<MapExportRequest> maps,
+            IEnumerable<string> mapIds,
             string outputDirectory,
             bool exportAllMaps = false)
         {
-            if (maps == null)
+            if (mapIds == null)
             {
-                throw new ArgumentNullException(nameof(maps));
+                throw new ArgumentNullException(nameof(mapIds));
             }
             if (string.IsNullOrWhiteSpace(outputDirectory))
             {
                 throw new ArgumentException("Output directory cannot be empty.", nameof(outputDirectory));
             }
 
-            List<MapExportRequest> requestedMaps = maps.ToList();
+            List<string> requestedMapIds = mapIds.ToList();
             IReadOnlyList<NormalizedMapExportRequest> normalizedMaps = NormalizeMapRequests(
-                requestedMaps,
+                requestedMapIds,
                 Array.Empty<int>());
             if (normalizedMaps.Count == 0 && !exportAllMaps)
             {
@@ -85,7 +85,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                 IReadOnlyDictionary<int, Wz_Image> mapIndex = BuildMapIndex(context.WzStructure.WzNode);
                 if (exportAllMaps)
                 {
-                    normalizedMaps = NormalizeMapRequests(requestedMaps, mapIndex.Keys);
+                    normalizedMaps = NormalizeMapRequests(requestedMapIds, mapIndex.Keys);
                     if (normalizedMaps.Count == 0)
                     {
                         throw new InvalidOperationException("No map ids were found in the loaded WZ files.");
@@ -94,15 +94,7 @@ namespace MapleStory.MachineLearningSampleGenerator
 
                 foreach (NormalizedMapExportRequest map in normalizedMaps)
                 {
-                    try
-                    {
-                        ExportMap(mapIndex, map.MapId, mapNames, stagingDirectory);
-                    }
-                    catch (UnsupportedMapGeometryException ex) when (map.SkipUnsupported)
-                    {
-                        Console.Error.WriteLine(
-                            $"Skipped map {map.MapId.ToString(CultureInfo.InvariantCulture)}: {ex.Reason}.");
-                    }
+                    ExportRequestedMap(mapIndex, map, mapNames, stagingDirectory, _errorWriter);
                 }
 
                 IReadOnlyList<int> sourceVersions = context.WzStructure.wz_files
@@ -130,22 +122,20 @@ namespace MapleStory.MachineLearningSampleGenerator
         }
 
         internal static IReadOnlyList<NormalizedMapExportRequest> NormalizeMapRequests(
-            IEnumerable<MapExportRequest> maps,
+            IEnumerable<string> mapIds,
             IEnumerable<int> indexedMapIds)
         {
-            if (maps == null)
+            if (mapIds == null)
             {
-                throw new ArgumentNullException(nameof(maps));
+                throw new ArgumentNullException(nameof(mapIds));
             }
             if (indexedMapIds == null)
             {
                 throw new ArgumentNullException(nameof(indexedMapIds));
             }
 
-            return maps
-                .Select(request => new NormalizedMapExportRequest(
-                    ParseMapId(request.MapId),
-                    request.SkipUnsupported))
+            return mapIds
+                .Select(mapId => new NormalizedMapExportRequest(ParseMapId(mapId), false))
                 .Concat(indexedMapIds.Select(mapId => new NormalizedMapExportRequest(mapId, true)))
                 .GroupBy(request => request.MapId)
                 .Select(group => new NormalizedMapExportRequest(
@@ -233,6 +223,30 @@ namespace MapleStory.MachineLearningSampleGenerator
                 catch (Exception)
                 {
                 }
+            }
+        }
+
+        internal static void ExportRequestedMap(
+            IReadOnlyDictionary<int, Wz_Image> mapIndex,
+            NormalizedMapExportRequest map,
+            IReadOnlyDictionary<int, string> mapNames,
+            string outputDirectory,
+            TextWriter errorWriter)
+        {
+            try
+            {
+                ExportMap(mapIndex, map.MapId, mapNames, outputDirectory);
+            }
+            catch (UnsupportedMapGeometryException ex) when (map.SkipUnsupported)
+            {
+                errorWriter.WriteLine(
+                    $"Skipped map {map.MapId.ToString(CultureInfo.InvariantCulture)}: {ex.Reason}.");
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to export map {map.MapId.ToString(CultureInfo.InvariantCulture)}: {ex.Message}",
+                    ex);
             }
         }
 
@@ -405,16 +419,6 @@ namespace MapleStory.MachineLearningSampleGenerator
             return mapId;
         }
 
-        internal static string FormatWzMapId(int mapId)
-        {
-            if (mapId < 0 || mapId > 999999999)
-            {
-                throw new ArgumentOutOfRangeException(nameof(mapId));
-            }
-
-            return mapId.ToString("D9", CultureInfo.InvariantCulture);
-        }
-
         internal static IReadOnlyDictionary<int, Wz_Image> BuildMapIndex(IEnumerable<Wz_Node> mapRoots)
         {
             if (mapRoots == null)
@@ -499,7 +503,12 @@ namespace MapleStory.MachineLearningSampleGenerator
 
                     string streetName = ReadString(resolvedMapNode, "streetName");
                     string mapName = ReadString(resolvedMapNode, "mapName");
-                    mapNames[mapId] = $"{streetName}：{mapName}";
+                    string displayName = string.Join(
+                        "：",
+                        new[] { streetName, mapName }.Where(value => !string.IsNullOrWhiteSpace(value)));
+                    mapNames[mapId] = string.IsNullOrEmpty(displayName)
+                        ? mapId.ToString(CultureInfo.InvariantCulture)
+                        : displayName;
                 }
             }
 
@@ -723,19 +732,6 @@ namespace MapleStory.MachineLearningSampleGenerator
         private static bool HasChildren(Wz_Node node, params string[] keys)
         {
             return node != null && keys.All(key => node.Nodes[key] != null);
-        }
-
-        internal readonly struct MapExportRequest
-        {
-            public MapExportRequest(string mapId, bool skipUnsupported)
-            {
-                MapId = mapId;
-                SkipUnsupported = skipUnsupported;
-            }
-
-            public string MapId { get; }
-
-            public bool SkipUnsupported { get; }
         }
 
         internal readonly struct NormalizedMapExportRequest
