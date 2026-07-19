@@ -15,7 +15,7 @@
 - Geometry flow: CLI -> `MapGeometryExporter` -> `MapPackPublisher`; it does not launch MapRender or use an `IDatasetWriter`.
 - The current capture path only records mob boxes from the renderer. Player boxes are synthetic and only appear when the YAML `player` post-processor generates avatars from WZ part IDs.
 - `CocoWriter` and `DarknetWriter` delete their dataset root before writing. Do not point them at directories that contain anything you need to keep.
-- Geometry publication does not clear its output directory. It preserves alignment sidecars and prior content-addressed assets, writes immutable assets first, and atomically replaces `map-pack.json` only after every requested map succeeds.
+- Geometry export stages raw files in a temporary sibling of the output directory. Publication does not clear the output directory: it preserves alignment sidecars and prior content-addressed assets, writes immutable assets first, and atomically replaces `map-pack.json` only after every included map succeeds.
 - The runtime expects MapleStory data under `Data/Base/Base.wz`. If `mapleStoryPath` is omitted from the YAML config, the app falls back to Windows registry lookup.
 - `MapRenderInvoker` relies on reflection and copied upstream WzComparerR2 behavior. `WzComparerR2.MapRender/MapData.cs` is intentionally patched so NPCs are skipped when the generator hosts MapRender.
 

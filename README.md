@@ -1,5 +1,5 @@
 # MapleStoryDetectionSampleGenerator
-Generate Machine Learning Samples Object Detection In MapleStory
+Generate MapleStory object-detection samples and deterministic Hecate map-geometry packs.
 ![](./pictures/result.png)
 
 
@@ -22,7 +22,7 @@ With [RTMDet](https://arxiv.org/abs/2212.07784) and ~10000 samples, it can achie
 
 # Run
 (Assuming assemblies are built with `Release` configuration. `Debug` configuration is similar)
-1. Use `WzComparerR2.exe` to find the desired map you want to sample. Assuming `993134200.img` is the map you want in Limina.
+1. For rendered `character` and `rune` runs, use `WzComparerR2.exe` to find the desired map ID. For example, assume `993134200.img` is the map you want in Limina. Geometry export does not require launching WzComparerR2.
 2. From the solution root, prepare a YAML config file. A checked-in example is available at `Examples\sample-generator.yml`.
 3. If you want synthetic players, configure avatar WZ part IDs in the `player` post-processor. The generator renders player frames on the fly through `MapleStory.Avatar`.
 4. Run `dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config ".\Examples\sample-generator.yml"`</br>
@@ -65,7 +65,7 @@ maps:
 
 Notes about the YAML format:
 * `mode` is required. Use `character` for normal map/object samples, `rune` for rune-arrow keypoint samples, or `geometry` for Hecate map packs.
-* `concurrency` is optional and controls how many map renders run at once. It defaults to `1`.
+* `concurrency` is optional and controls how many map renders run at once. It defaults to `1`. Geometry mode does not use it, but any configured value must still be greater than `0`.
 * `maps` is required. The legacy sequence form lists explicit map IDs, and each `id` should be the numeric map id without `.img`.
 * Root `sampling` acts as the default for every rendered map. Root `postProcessors` acts as the default in `character` mode.
 * `render.width`, `render.height`, `sampling`, and `output.name` are required in rendered modes. `sampling.count` controls how many uniformly random camera positions are sampled from each map.
@@ -230,9 +230,9 @@ The COCO json is defined as following:
 Note that `segmentation` covers the area as the same as `bbox` does. No segmentation or masked implemented .
 
 ## Geometry Export
-Hecate map geometry can be exported directly from WZ data without running the renderer or sampler. Geometry mode requires `output.format: geometry`; `render`, `sampling`, and `output.name` are optional and do not affect the pack, while `postProcessors` are not supported. Explicit map IDs are normalized, deduplicated, and exported in numeric order.
+Hecate map geometry can be exported directly from WZ data without running the renderer or sampler. Geometry mode requires `output.format: geometry` and `output.path`; the output path cannot be a filesystem root. `concurrency`, `render`, `sampling`, and `output.name` are optional and do not affect the pack, while `postProcessors` are not supported. Explicit map IDs are normalized, deduplicated, and exported in numeric order.
 
-The exporter derives one Hecate geometry schema v2 JSON file and one PNG minimap canvas per map. Explicit map entries fail when the resolved map has no minimap, has additional minimap canvases, or lacks finite positive minimap scale and dimensions; maps selected through `allMaps` skip those unsupported maps and report them in numeric order. It publishes a deterministic map-pack schema v1 manifest with maps and positive WZ versions sorted numerically. Repeating an export with the same geometry, minimaps, WZ versions, and producer version produces the same manifest and content-addressed filenames.
+The exporter derives one Hecate geometry schema v2 JSON file and one PNG minimap canvas per map. Explicit map entries fail when the resolved map has no minimap, has additional minimap canvases, or lacks finite positive-integer minimap scale and dimensions; maps selected through `allMaps` skip those unsupported maps and report them in numeric order. If no supported map remains, the run fails without replacing the existing manifest. It publishes a deterministic map-pack schema v1 manifest with maps and positive WZ versions sorted numerically. Repeating an export with the same geometry, minimaps, WZ versions, and producer version produces the same manifest and content-addressed filenames. MS pack overlays are loaded in ordinal path order so filesystem enumeration order does not change the result.
 
 ```yaml
 mode: geometry
@@ -251,7 +251,7 @@ Run it with:
 dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config .\Examples\hecate-geometry.yml
 ```
 
-`map-pack.json` is the pack's mutable entry point. Each map entry names and pins the immutable geometry and minimap assets with lowercase SHA-256 values. `map_name` comes from String.wz and falls back to the numeric map ID when no name is available.
+`map-pack.json` is the pack's mutable entry point. Each map entry names and pins the immutable geometry and minimap assets with lowercase SHA-256 values. `map_name` comes from String.wz: available `streetName` and `mapName` values are joined with `：`, and the numeric map ID is used when neither is available.
 
 ```json
 {
@@ -277,7 +277,9 @@ dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config .\E
 }
 ```
 
-The referenced geometry contains raw WZ map coordinates. Only non-zero horizontal footholds are emitted, with `x1 < x2`; ropes and ladders normalize `y1 <= y2` and use `kind: rope` or `kind: ladder`; and portals are emitted only when their destination is another portal in the same resolved map. Known portal types use their WZ symbolic name, while unknown types use their numeric value as a string.
+`producer.version` uses the assembly informational version plus its source revision. Builds without source-revision metadata use the assembly module version ID instead, so every published pack still identifies the producing binary.
+
+The referenced geometry contains raw WZ map coordinates. For a WZ map linked through `info/link`, `map_id` and `map_name` describe the requested map while the minimap and geometry come from the linked map. Only non-zero horizontal footholds are emitted, with `x1 < x2`; ropes and ladders normalize `y1 <= y2` and use `kind: rope` or `kind: ladder`; and portals are emitted only when their destination is another portal in the same resolved map. Known portal types use their WZ symbolic name, while unknown types use their numeric value as a string.
 
 ```json
 {
@@ -304,6 +306,6 @@ The referenced geometry contains raw WZ map coordinates. Only non-zero horizonta
 }
 ```
 
-Assets are published immutably before `map-pack.json` is atomically replaced. If any requested map fails, the existing manifest remains valid; unreferenced content-addressed files from an interrupted update may remain. Publication never clears the output directory, so prior hashed assets and Hecate-owned `*.alignment.json` sidecars are preserved.
+The exporter builds raw files in a temporary `.hecate-map-pack-*` directory beside the output directory, with cleanup attempted after every run. Assets are then published immutably before `map-pack.json` is atomically replaced. An existing content-addressed asset is reused only after its hash is validated. If any requested map fails, the existing manifest remains valid; unreferenced content-addressed files from an interrupted update may remain. Publication never clears the output directory, so prior hashed assets and Hecate-owned `*.alignment.json` sidecars are preserved.
 
 Only `map-pack.json` and the geometry/minimap files it references belong in Hecate application resources. The generator executable, its DLLs, staging files, and source WZ data remain private build-time inputs and are not Hecate runtime dependencies. Consumers should read the manifest, verify both SHA-256 fields, and ignore unreferenced files.
