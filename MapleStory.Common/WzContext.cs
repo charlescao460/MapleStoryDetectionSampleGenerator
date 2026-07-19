@@ -94,7 +94,7 @@ namespace MapleStory.Common
                     string packsDir = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(baseWzPath)), "Packs");
                     if (Directory.Exists(packsDir))
                     {
-                        foreach (string msFile in Directory.GetFiles(packsDir, "*.ms"))
+                        foreach (string msFile in OrderMsPackPaths(Directory.GetFiles(packsDir, "*.ms")))
                         {
                             wzStructure.LoadMsFile(msFile);
                         }
@@ -107,6 +107,16 @@ namespace MapleStory.Common
             }
 
             return wzStructure;
+        }
+
+        internal static IReadOnlyList<string> OrderMsPackPaths(IEnumerable<string> msFilePaths)
+        {
+            if (msFilePaths == null)
+            {
+                throw new ArgumentNullException(nameof(msFilePaths));
+            }
+
+            return msFilePaths.OrderBy(path => path, StringComparer.Ordinal).ToArray();
         }
 
         private static void Register(WzContext context)
