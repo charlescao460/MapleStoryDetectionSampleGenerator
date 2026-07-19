@@ -275,6 +275,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                 Wz_Node miniMapNode = RequireSupportedMinimap(resolvedMap.Node, mapId);
 
                 string imageName = rawMapId + ".png";
+                MinimapPayload minimap = ReadMinimap(miniMapNode, imageName, mapId);
                 SaveMinimapImage(
                     miniMapNode,
                     Path.Combine(outputDirectory, imageName),
@@ -287,7 +288,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                     MapName = mapNames.TryGetValue(mapId, out string mapName) && !string.IsNullOrWhiteSpace(mapName)
                         ? mapName
                         : rawMapId,
-                    Minimap = ReadMinimap(miniMapNode, imageName, mapId),
+                    Minimap = minimap,
                     Platforms = ReadPlatforms(resolvedMap.Node.Nodes["foothold"]),
                     Ropes = ReadRopes(resolvedMap.Node.Nodes["ladderRope"]),
                     Portals = ReadPortals(resolvedMap.Node.Nodes["portal"], resolvedMap.MapId),
