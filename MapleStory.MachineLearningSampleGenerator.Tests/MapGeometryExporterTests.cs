@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using MapleStory.MachineLearningSampleGenerator;
 using WzComparerR2.WzLib;
@@ -62,6 +63,47 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         }
 
         [Fact]
+        public void NormalizeMapRequests_UsesIndexAndKeepsExplicitMapsStrict()
+        {
+            IReadOnlyList<MapGeometryExporter.NormalizedMapExportRequest> maps =
+                MapGeometryExporter.NormalizeMapRequests(
+                    new[]
+                    {
+                        new MapGeometryExporter.MapExportRequest("200000000", false),
+                        new MapGeometryExporter.MapExportRequest("300000000", true),
+                    },
+                    new[] { 300000000, 100000000, 200000000 });
+
+            Assert.Equal(new[] { 100000000, 200000000, 300000000 }, maps.Select(map => map.MapId));
+            Assert.True(maps[0].SkipUnsupported);
+            Assert.False(maps[1].SkipUnsupported);
+            Assert.True(maps[2].SkipUnsupported);
+        }
+
+        [Fact]
+        public void FormatProducerVersion_UsesSourceRevisionIdWithoutDuplication()
+        {
+            Guid moduleVersionId = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+
+            Assert.Equal(
+                "2.1.0+abcdef",
+                MapGeometryExporter.FormatProducerVersion("2.1.0", "abcdef", moduleVersionId));
+            Assert.Equal(
+                "2.1.0+abcdef",
+                MapGeometryExporter.FormatProducerVersion("2.1.0+abcdef", "abcdef", moduleVersionId));
+        }
+
+        [Fact]
+        public void FormatProducerVersion_UsesModuleVersionIdWithoutSourceRevision()
+        {
+            Guid moduleVersionId = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+
+            Assert.Equal(
+                "2.1.0+mvid.0123456789abcdef0123456789abcdef",
+                MapGeometryExporter.FormatProducerVersion("2.1.0", null, moduleVersionId));
+        }
+
+        [Fact]
         public void ExtractMapImage_RejectsUnidentifiedEncryption()
         {
             Wz_Image image = new UnextractableWzImage();
@@ -90,6 +132,43 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
                 output));
 
             Assert.Empty(Directory.EnumerateDirectories(workspace.RootPath, ".hecate-map-pack-*"));
+        }
+
+        [Fact]
+        public void ExportMaps_PreservesContextFailureWhenCleanupAlsoFails()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            using StringWriter errorWriter = new StringWriter();
+            string output = Path.Combine(workspace.RootPath, "output");
+            MapGeometryExporter exporter = new MapGeometryExporter(
+                workspace.RootPath,
+                Encoding.UTF8,
+                (_, _) => throw new IOException("cleanup failed"),
+                errorWriter);
+
+            Assert.Throws<ArgumentException>(() => exporter.ExportMaps(
+                new[] { new MapGeometryExporter.MapExportRequest("410000520", false) },
+                output));
+
+            Assert.Contains("cleanup failed", errorWriter.ToString());
+        }
+
+        [Fact]
+        public void CleanupStagingDirectory_ThrowsCleanupOnlyFailure()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            using StringWriter errorWriter = new StringWriter();
+            string staging = workspace.CreateDirectory("staging");
+
+            IOException exception = Assert.Throws<IOException>(() =>
+                MapGeometryExporter.CleanupStagingDirectory(
+                    staging,
+                    null,
+                    (_, _) => throw new IOException("cleanup failed"),
+                    errorWriter));
+
+            Assert.Equal("cleanup failed", exception.Message);
+            Assert.Equal(string.Empty, errorWriter.ToString());
         }
 
         [Fact]

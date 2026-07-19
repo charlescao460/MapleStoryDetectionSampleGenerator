@@ -89,15 +89,16 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 defaultSampling,
                 maps);
 
+            bool exportAllMaps = generationMode == GenerationMode.Geometry && config.AllMaps;
             AppendAllMaps(
-                config.AllMaps,
+                config.AllMaps && !exportAllMaps,
                 mapleStoryPath,
                 textEncoding,
                 defaultSampling,
                 defaultPostProcessors,
                 maps);
 
-            if (maps.Count == 0)
+            if (maps.Count == 0 && !exportAllMaps)
             {
                 throw new ConfigurationException("maps did not resolve to any available map IDs.");
             }
@@ -115,6 +116,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
                 renderWidth,
                 renderHeight,
                 concurrency,
+                exportAllMaps,
                 maps.AsReadOnly());
         }
 

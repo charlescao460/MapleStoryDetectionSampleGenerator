@@ -91,7 +91,31 @@ maps:
             Assert.Equal("geometry", config.OutputName);
             Assert.Equal(0, config.RenderWidth);
             Assert.Equal(0, config.RenderHeight);
+            Assert.False(config.ExportAllMaps);
             Assert.Equal(1, config.Maps[0].Count);
+        }
+
+        [Fact]
+        public void LoadResolved_GeometryAllMaps_DefersCatalogSelectionToExporter()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            CreateMapleStoryTree(workspace);
+            workspace.CreateDirectory("output");
+            FakeMapCatalog mapCatalog = new FakeMapCatalog("100000000");
+
+            ResolvedRunConfig config = LoadResolved(workspace, @"
+mode: geometry
+mapleStoryPath: ./maple
+output:
+  format: geometry
+  path: ./output
+maps:
+  allMaps: true
+", mapCatalog: mapCatalog);
+
+            Assert.True(config.ExportAllMaps);
+            Assert.Empty(config.Maps);
+            Assert.Equal(0, mapCatalog.CallCount);
         }
 
         [Fact]
@@ -1059,10 +1083,13 @@ maps:
                 _mapIds = mapIds;
             }
 
+            public int CallCount { get; private set; }
+
             public IReadOnlyList<string> ListMapIds(string mapleStoryPath, Encoding encoding)
             {
                 _ = mapleStoryPath;
                 _ = encoding;
+                CallCount++;
                 return _mapIds;
             }
         }

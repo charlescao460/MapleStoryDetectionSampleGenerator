@@ -110,6 +110,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             int renderWidth,
             int renderHeight,
             int concurrency,
+            bool exportAllMaps,
             IReadOnlyList<ResolvedMapConfig> maps)
         {
             ConfigPath = configPath;
@@ -122,6 +123,7 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             RenderWidth = renderWidth;
             RenderHeight = renderHeight;
             Concurrency = concurrency;
+            ExportAllMaps = exportAllMaps;
             Maps = maps;
         }
 
@@ -144,6 +146,8 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public int RenderHeight { get; }
 
         public int Concurrency { get; }
+
+        public bool ExportAllMaps { get; }
 
         public IReadOnlyList<ResolvedMapConfig> Maps { get; }
     }

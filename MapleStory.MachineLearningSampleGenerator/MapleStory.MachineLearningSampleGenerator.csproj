@@ -8,6 +8,15 @@
     <ItemGroup>
         <PackageReference Include="YamlDotNet" Version="15.1.2" />
     </ItemGroup>
+    <Target Name="AddSourceRevisionAssemblyMetadata"
+            AfterTargets="InitializeSourceControlInformation"
+            BeforeTargets="GetAssemblyAttributes"
+            Condition="'$(SourceRevisionId)' != ''">
+        <ItemGroup>
+            <AssemblyMetadata Remove="SourceRevisionId" />
+            <AssemblyMetadata Include="SourceRevisionId" Value="$(SourceRevisionId)" />
+        </ItemGroup>
+    </Target>
     <ItemGroup>
         <ProjectReference Include="..\MapleStory.Avatar\MapleStory.Avatar.csproj" />
         <ProjectReference Include="..\MapleStory.Common\MapleStory.Common.csproj" />

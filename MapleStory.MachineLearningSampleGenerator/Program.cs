@@ -137,7 +137,8 @@ namespace MapleStory.MachineLearningSampleGenerator
                 config.Maps.Select(map => new MapGeometryExporter.MapExportRequest(
                     map.Id,
                     map.SelectionSource == MapSelectionSource.AllMaps)),
-                config.OutputPath);
+                config.OutputPath,
+                config.ExportAllMaps);
             return 0;
         }
 

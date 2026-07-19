@@ -26,14 +26,30 @@ namespace MapleStory.MachineLearningSampleGenerator
 
         private readonly string _mapleStoryPath;
         private readonly Encoding _encoding;
+        private readonly Action<string, bool> _deleteDirectory;
+        private readonly TextWriter _errorWriter;
 
         public MapGeometryExporter(string mapleStoryPath, Encoding encoding)
+            : this(mapleStoryPath, encoding, Directory.Delete, Console.Error)
+        {
+        }
+
+        internal MapGeometryExporter(
+            string mapleStoryPath,
+            Encoding encoding,
+            Action<string, bool> deleteDirectory,
+            TextWriter errorWriter)
         {
             _mapleStoryPath = mapleStoryPath ?? throw new ArgumentNullException(nameof(mapleStoryPath));
             _encoding = encoding ?? throw new ArgumentNullException(nameof(encoding));
+            _deleteDirectory = deleteDirectory ?? throw new ArgumentNullException(nameof(deleteDirectory));
+            _errorWriter = errorWriter ?? throw new ArgumentNullException(nameof(errorWriter));
         }
 
-        public void ExportMaps(IEnumerable<MapExportRequest> maps, string outputDirectory)
+        public void ExportMaps(
+            IEnumerable<MapExportRequest> maps,
+            string outputDirectory,
+            bool exportAllMaps = false)
         {
             if (maps == null)
             {
@@ -44,17 +60,11 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new ArgumentException("Output directory cannot be empty.", nameof(outputDirectory));
             }
 
-            List<NormalizedMapExportRequest> normalizedMaps = maps
-                .Select(request => new NormalizedMapExportRequest(
-                    ParseMapId(request.MapId),
-                    request.SkipUnsupported))
-                .GroupBy(request => request.MapId)
-                .Select(group => new NormalizedMapExportRequest(
-                    group.Key,
-                    group.All(request => request.SkipUnsupported)))
-                .OrderBy(request => request.MapId)
-                .ToList();
-            if (normalizedMaps.Count == 0)
+            List<MapExportRequest> requestedMaps = maps.ToList();
+            IReadOnlyList<NormalizedMapExportRequest> normalizedMaps = NormalizeMapRequests(
+                requestedMaps,
+                Array.Empty<int>());
+            if (normalizedMaps.Count == 0 && !exportAllMaps)
             {
                 throw new InvalidOperationException("At least one map id is required.");
             }
@@ -64,6 +74,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             string stagingDirectory = Path.Combine(
                 outputParent,
                 ".hecate-map-pack-" + Guid.NewGuid().ToString("N"));
+            Exception primaryException = null;
             try
             {
                 Directory.CreateDirectory(stagingDirectory);
@@ -72,6 +83,15 @@ namespace MapleStory.MachineLearningSampleGenerator
 
                 IReadOnlyDictionary<int, string> mapNames = LoadMapNames(context);
                 IReadOnlyDictionary<int, Wz_Image> mapIndex = BuildMapIndex(context.WzStructure.WzNode);
+                if (exportAllMaps)
+                {
+                    normalizedMaps = NormalizeMapRequests(requestedMaps, mapIndex.Keys);
+                    if (normalizedMaps.Count == 0)
+                    {
+                        throw new InvalidOperationException("No map ids were found in the loaded WZ files.");
+                    }
+                }
+
                 foreach (NormalizedMapExportRequest map in normalizedMaps)
                 {
                     try
@@ -91,14 +111,127 @@ namespace MapleStory.MachineLearningSampleGenerator
                     .Distinct()
                     .OrderBy(version => version)
                     .ToList();
-                string producerVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? string.Empty;
+                string producerVersion = GetProducerVersion(Assembly.GetExecutingAssembly());
                 MapPackPublisher.Publish(stagingDirectory, fullOutputPath, sourceVersions, producerVersion);
+            }
+            catch (Exception ex)
+            {
+                primaryException = ex;
+                throw;
             }
             finally
             {
+                CleanupStagingDirectory(
+                    stagingDirectory,
+                    primaryException,
+                    _deleteDirectory,
+                    _errorWriter);
+            }
+        }
+
+        internal static IReadOnlyList<NormalizedMapExportRequest> NormalizeMapRequests(
+            IEnumerable<MapExportRequest> maps,
+            IEnumerable<int> indexedMapIds)
+        {
+            if (maps == null)
+            {
+                throw new ArgumentNullException(nameof(maps));
+            }
+            if (indexedMapIds == null)
+            {
+                throw new ArgumentNullException(nameof(indexedMapIds));
+            }
+
+            return maps
+                .Select(request => new NormalizedMapExportRequest(
+                    ParseMapId(request.MapId),
+                    request.SkipUnsupported))
+                .Concat(indexedMapIds.Select(mapId => new NormalizedMapExportRequest(mapId, true)))
+                .GroupBy(request => request.MapId)
+                .Select(group => new NormalizedMapExportRequest(
+                    group.Key,
+                    group.All(request => request.SkipUnsupported)))
+                .OrderBy(request => request.MapId)
+                .ToList();
+        }
+
+        internal static string GetProducerVersion(Assembly assembly)
+        {
+            if (assembly == null)
+            {
+                throw new ArgumentNullException(nameof(assembly));
+            }
+
+            string informationalVersion = assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion;
+            if (string.IsNullOrWhiteSpace(informationalVersion))
+            {
+                informationalVersion = assembly.GetName().Version?.ToString() ?? "unknown";
+            }
+
+            string sourceRevisionId = assembly
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .FirstOrDefault(attribute => string.Equals(
+                    attribute.Key,
+                    "SourceRevisionId",
+                    StringComparison.Ordinal))
+                ?.Value;
+            return FormatProducerVersion(
+                informationalVersion,
+                sourceRevisionId,
+                assembly.ManifestModule.ModuleVersionId);
+        }
+
+        internal static string FormatProducerVersion(
+            string informationalVersion,
+            string sourceRevisionId,
+            Guid moduleVersionId)
+        {
+            string version = string.IsNullOrWhiteSpace(informationalVersion)
+                ? "unknown"
+                : informationalVersion.Trim();
+            string identifier;
+            if (!string.IsNullOrWhiteSpace(sourceRevisionId))
+            {
+                identifier = sourceRevisionId.Trim();
+                if (version.IndexOf(identifier, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return version;
+                }
+            }
+            else
+            {
+                identifier = "mvid." + moduleVersionId.ToString("N");
+            }
+
+            return version.IndexOf('+') >= 0
+                ? version + "." + identifier
+                : version + "+" + identifier;
+        }
+
+        internal static void CleanupStagingDirectory(
+            string stagingDirectory,
+            Exception primaryException,
+            Action<string, bool> deleteDirectory,
+            TextWriter errorWriter)
+        {
+            try
+            {
                 if (Directory.Exists(stagingDirectory))
                 {
-                    Directory.Delete(stagingDirectory, true);
+                    deleteDirectory(stagingDirectory, true);
+                }
+            }
+            catch (Exception cleanupException) when (primaryException != null)
+            {
+                try
+                {
+                    errorWriter.WriteLine(
+                        $"Failed to clean staging directory '{stagingDirectory}': {cleanupException.GetType().Name}: {cleanupException.Message}");
+                }
+                catch (Exception)
+                {
                 }
             }
         }
@@ -605,7 +738,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             public bool SkipUnsupported { get; }
         }
 
-        private readonly struct NormalizedMapExportRequest
+        internal readonly struct NormalizedMapExportRequest
         {
             public NormalizedMapExportRequest(int mapId, bool skipUnsupported)
             {
