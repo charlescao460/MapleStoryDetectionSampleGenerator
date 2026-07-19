@@ -222,6 +222,44 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         }
 
         [Fact]
+        public void ReadMinimap_RequiresPositiveTransformValues()
+        {
+            Wz_Node miniMapNode = CreateMinimapNode();
+
+            MapGeometryExporter.MinimapPayload minimap = MapGeometryExporter.ReadMinimap(
+                miniMapNode,
+                "410000520.png",
+                410000520);
+
+            Assert.Equal(4, minimap.Mag);
+            Assert.Equal(800, minimap.CanvasWidth);
+            Assert.Equal(600, minimap.CanvasHeight);
+        }
+
+        [Theory]
+        [InlineData("mag", null)]
+        [InlineData("mag", 0)]
+        [InlineData("mag", -1)]
+        [InlineData("mag", "4")]
+        [InlineData("mag", double.NaN)]
+        [InlineData("mag", double.PositiveInfinity)]
+        [InlineData("mag", 1.5)]
+        [InlineData("width", 0)]
+        [InlineData("height", 0)]
+        public void ReadMinimap_ClassifiesInvalidTransformAsUnsupported(string fieldName, object invalidValue)
+        {
+            Wz_Node miniMapNode = CreateMinimapNode(fieldName, invalidValue);
+
+            MapGeometryExporter.UnsupportedMapGeometryException exception = Assert.Throws<
+                MapGeometryExporter.UnsupportedMapGeometryException>(() =>
+                MapGeometryExporter.ReadMinimap(miniMapNode, "410000520.png", 410000520));
+
+            Assert.Equal(
+                $"has invalid minimap {fieldName}; expected a finite positive integer",
+                exception.Reason);
+        }
+
+        [Fact]
         public void ResolveMinimapCanvas_PreservesLinkedResolverFailure()
         {
             Wz_Node miniMapNode = new Wz_Node("miniMap");
@@ -319,6 +357,30 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
 
             Assert.StartsWith("Failed to export map 410000520:", exception.Message);
             Assert.IsType<InvalidDataException>(exception.InnerException);
+        }
+
+        private static Wz_Node CreateMinimapNode(string invalidFieldName = null, object invalidValue = null)
+        {
+            Wz_Node miniMapNode = new Wz_Node("miniMap");
+            Dictionary<string, int> values = new Dictionary<string, int>
+            {
+                ["mag"] = 4,
+                ["width"] = 800,
+                ["height"] = 600,
+            };
+            foreach (KeyValuePair<string, int> value in values)
+            {
+                if (!string.Equals(value.Key, invalidFieldName, StringComparison.Ordinal))
+                {
+                    miniMapNode.Nodes.Add(value.Key).Value = value.Value;
+                }
+            }
+            if (invalidFieldName != null && invalidValue != null)
+            {
+                miniMapNode.Nodes.Add(invalidFieldName).Value = invalidValue;
+            }
+
+            return miniMapNode;
         }
 
         private sealed class UnextractableWzImage : Wz_Image

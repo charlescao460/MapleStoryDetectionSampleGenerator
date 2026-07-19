@@ -287,7 +287,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                     MapName = mapNames.TryGetValue(mapId, out string mapName) && !string.IsNullOrWhiteSpace(mapName)
                         ? mapName
                         : rawMapId,
-                    Minimap = ReadMinimap(miniMapNode, imageName),
+                    Minimap = ReadMinimap(miniMapNode, imageName, mapId),
                     Platforms = ReadPlatforms(resolvedMap.Node.Nodes["foothold"]),
                     Ropes = ReadRopes(resolvedMap.Node.Nodes["ladderRope"]),
                     Portals = ReadPortals(resolvedMap.Node.Nodes["portal"], resolvedMap.MapId),
@@ -374,17 +374,63 @@ namespace MapleStory.MachineLearningSampleGenerator
             return miniMapNode;
         }
 
-        private static MinimapPayload ReadMinimap(Wz_Node miniMapNode, string imageName)
+        internal static MinimapPayload ReadMinimap(Wz_Node miniMapNode, string imageName, int mapId)
         {
             return new MinimapPayload
             {
                 CenterX = miniMapNode.Nodes["centerX"].GetValueEx(0),
                 CenterY = miniMapNode.Nodes["centerY"].GetValueEx(0),
-                Mag = miniMapNode.Nodes["mag"].GetValueEx(0),
-                CanvasWidth = miniMapNode.Nodes["width"].GetValueEx(0),
-                CanvasHeight = miniMapNode.Nodes["height"].GetValueEx(0),
+                Mag = ReadRequiredPositiveMinimapValue(miniMapNode, "mag", mapId),
+                CanvasWidth = ReadRequiredPositiveMinimapValue(miniMapNode, "width", mapId),
+                CanvasHeight = ReadRequiredPositiveMinimapValue(miniMapNode, "height", mapId),
                 Image = imageName,
             };
+        }
+
+        private static int ReadRequiredPositiveMinimapValue(Wz_Node miniMapNode, string fieldName, int mapId)
+        {
+            object rawValue = miniMapNode?.Nodes[fieldName]?.Value;
+            TypeCode typeCode = rawValue == null
+                ? TypeCode.Empty
+                : Type.GetTypeCode(rawValue.GetType());
+            bool isNumeric = typeCode == TypeCode.SByte ||
+                typeCode == TypeCode.Byte ||
+                typeCode == TypeCode.Int16 ||
+                typeCode == TypeCode.UInt16 ||
+                typeCode == TypeCode.Int32 ||
+                typeCode == TypeCode.UInt32 ||
+                typeCode == TypeCode.Int64 ||
+                typeCode == TypeCode.UInt64 ||
+                typeCode == TypeCode.Single ||
+                typeCode == TypeCode.Double ||
+                typeCode == TypeCode.Decimal;
+
+            decimal value = 0;
+            if (isNumeric &&
+                !(rawValue is float single && !float.IsFinite(single)) &&
+                !(rawValue is double number && !double.IsFinite(number)))
+            {
+                try
+                {
+                    value = Convert.ToDecimal(rawValue, CultureInfo.InvariantCulture);
+                }
+                catch (OverflowException)
+                {
+                    isNumeric = false;
+                }
+            }
+
+            if (!isNumeric ||
+                value <= 0 ||
+                value > int.MaxValue ||
+                value != decimal.Truncate(value))
+            {
+                throw new UnsupportedMapGeometryException(
+                    mapId,
+                    $"has invalid minimap {fieldName}; expected a finite positive integer");
+            }
+
+            return decimal.ToInt32(value);
         }
 
         private static void SaveMinimapImage(
@@ -827,7 +873,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             public List<PortalPayload> Portals { get; set; }
         }
 
-        private sealed class MinimapPayload
+        internal sealed class MinimapPayload
         {
             [JsonPropertyName("center_x")]
             public int CenterX { get; set; }

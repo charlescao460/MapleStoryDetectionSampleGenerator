@@ -232,7 +232,7 @@ Note that `segmentation` covers the area as the same as `bbox` does. No segmenta
 ## Geometry Export
 Hecate map geometry can be exported directly from WZ data without running the renderer or sampler. Geometry mode requires `output.format: geometry`; `render`, `sampling`, and `output.name` are optional and do not affect the pack, while `postProcessors` are not supported. Explicit map IDs are normalized, deduplicated, and exported in numeric order.
 
-The exporter derives one Hecate geometry schema v2 JSON file and one PNG minimap canvas per map. Explicit map entries fail when the resolved map has no minimap or has additional minimap canvases; maps selected through `allMaps` skip those unsupported maps and report them in numeric order. It publishes a deterministic map-pack schema v1 manifest with maps and positive WZ versions sorted numerically. Repeating an export with the same geometry, minimaps, WZ versions, and producer version produces the same manifest and content-addressed filenames.
+The exporter derives one Hecate geometry schema v2 JSON file and one PNG minimap canvas per map. Explicit map entries fail when the resolved map has no minimap, has additional minimap canvases, or lacks finite positive minimap scale and dimensions; maps selected through `allMaps` skip those unsupported maps and report them in numeric order. It publishes a deterministic map-pack schema v1 manifest with maps and positive WZ versions sorted numerically. Repeating an export with the same geometry, minimaps, WZ versions, and producer version produces the same manifest and content-addressed filenames.
 
 ```yaml
 mode: geometry
