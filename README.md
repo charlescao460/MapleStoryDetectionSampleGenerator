@@ -258,7 +258,7 @@ dotnet run --project .\MapleStory.MachineLearningSampleGenerator -- --config .\E
   "schema_version": 1,
   "producer": {
     "name": "MapleStoryDetectionSampleGenerator",
-    "version": "1.0.0.0"
+    "version": "1.0.0+<revision>"
   },
   "source": {
     "kind": "wz",

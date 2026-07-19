@@ -360,7 +360,6 @@ maps:
                 Assert.Equal(5, map.Count);
                 Assert.Equal(7, map.IntervalMs);
                 Assert.Empty(map.PostProcessors);
-                Assert.Equal(MapSelectionSource.Random, map.SelectionSource);
             });
         }
 
@@ -456,7 +455,6 @@ maps:
             {
                 Assert.Equal(1, map.Count);
                 Assert.Equal(7, map.IntervalMs);
-                Assert.Equal(MapSelectionSource.AllMaps, map.SelectionSource);
             });
         }
 
@@ -487,9 +485,6 @@ maps:
 
             Assert.Equal(new[] { "200000000", "100000000", "300000000" }, config.Maps.Select(map => map.Id));
             Assert.Equal(3, config.Maps.Select(map => map.Id).Distinct().Count());
-            Assert.Equal(MapSelectionSource.Explicit, config.Maps[0].SelectionSource);
-            Assert.All(config.Maps.Skip(1), map =>
-                Assert.Equal(MapSelectionSource.AllMaps, map.SelectionSource));
         }
 
         [Theory]

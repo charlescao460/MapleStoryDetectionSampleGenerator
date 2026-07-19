@@ -131,6 +131,42 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             Assert.Equal(originalManifest, File.ReadAllBytes(manifestPath));
         }
 
+        [Fact]
+        public void ExecuteWithPendingCleanup_PreservesPrimaryFailureWhenCleanupAlsoFails()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            using StringWriter errorWriter = new StringWriter();
+            string pending = workspace.CreateFile("asset.pending", "partial");
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+                MapPackPublisher.ExecuteWithPendingCleanup(
+                    pending,
+                    () => throw new InvalidOperationException("publication failed"),
+                    _ => throw new IOException("cleanup failed"),
+                    errorWriter));
+
+            Assert.Equal("publication failed", exception.Message);
+            Assert.Contains("cleanup failed", errorWriter.ToString());
+        }
+
+        [Fact]
+        public void ExecuteWithPendingCleanup_ThrowsCleanupOnlyFailure()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            using StringWriter errorWriter = new StringWriter();
+            string pending = workspace.CreateFile("asset.pending", "partial");
+
+            IOException exception = Assert.Throws<IOException>(() =>
+                MapPackPublisher.ExecuteWithPendingCleanup(
+                    pending,
+                    () => { },
+                    _ => throw new IOException("cleanup failed"),
+                    errorWriter));
+
+            Assert.Equal("cleanup failed", exception.Message);
+            Assert.Equal(string.Empty, errorWriter.ToString());
+        }
+
         private static (string Geometry, string Minimap) ReadAssetNames(string manifestPath)
         {
             using JsonDocument document = JsonDocument.Parse(File.ReadAllText(manifestPath));

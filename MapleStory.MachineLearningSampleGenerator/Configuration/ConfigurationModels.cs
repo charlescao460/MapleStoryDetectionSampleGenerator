@@ -158,14 +158,12 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
             string id,
             int count,
             int intervalMs,
-            IReadOnlyList<PostProcessorConfig> postProcessors,
-            MapSelectionSource selectionSource = MapSelectionSource.Explicit)
+            IReadOnlyList<PostProcessorConfig> postProcessors)
         {
             Id = id;
             Count = count;
             IntervalMs = intervalMs;
             PostProcessors = postProcessors;
-            SelectionSource = selectionSource;
         }
 
         public string Id { get; }
@@ -175,14 +173,5 @@ namespace MapleStory.MachineLearningSampleGenerator.Configuration
         public int IntervalMs { get; }
 
         public IReadOnlyList<PostProcessorConfig> PostProcessors { get; }
-
-        public MapSelectionSource SelectionSource { get; }
-    }
-
-    internal enum MapSelectionSource
-    {
-        Explicit,
-        Random,
-        AllMaps,
     }
 }

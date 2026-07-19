@@ -189,7 +189,7 @@ namespace MapleStory.MachineLearningSampleGenerator
             string pending = Path.Combine(
                 outputDirectory,
                 "." + fileName + "." + Guid.NewGuid().ToString("N") + ".pending");
-            try
+            ExecuteWithPendingCleanup(pending, () =>
             {
                 writePending(pending);
                 ValidatePublishedAsset(pending, expectedHash);
@@ -201,14 +201,7 @@ namespace MapleStory.MachineLearningSampleGenerator
                 {
                     ValidatePublishedAsset(target, expectedHash);
                 }
-            }
-            finally
-            {
-                if (File.Exists(pending))
-                {
-                    File.Delete(pending);
-                }
-            }
+            }, File.Delete, Console.Error);
         }
 
         private static void ValidatePublishedAsset(string path, string expectedHash)
@@ -224,16 +217,48 @@ namespace MapleStory.MachineLearningSampleGenerator
             string pending = Path.Combine(
                 outputDirectory,
                 "." + ManifestFileName + "." + Guid.NewGuid().ToString("N") + ".pending");
-            try
+            ExecuteWithPendingCleanup(pending, () =>
             {
                 File.WriteAllText(pending, manifestJson, new UTF8Encoding(false));
                 File.Move(pending, Path.Combine(outputDirectory, ManifestFileName), true);
+            }, File.Delete, Console.Error);
+        }
+
+        internal static void ExecuteWithPendingCleanup(
+            string pendingPath,
+            Action operation,
+            Action<string> deleteFile,
+            TextWriter errorWriter)
+        {
+            Exception primaryException = null;
+            try
+            {
+                operation();
+            }
+            catch (Exception ex)
+            {
+                primaryException = ex;
+                throw;
             }
             finally
             {
-                if (File.Exists(pending))
+                try
                 {
-                    File.Delete(pending);
+                    if (File.Exists(pendingPath))
+                    {
+                        deleteFile(pendingPath);
+                    }
+                }
+                catch (Exception cleanupException) when (primaryException != null)
+                {
+                    try
+                    {
+                        errorWriter.WriteLine(
+                            $"Failed to clean pending file '{pendingPath}': {cleanupException.GetType().Name}: {cleanupException.Message}");
+                    }
+                    catch (Exception)
+                    {
+                    }
                 }
             }
         }
