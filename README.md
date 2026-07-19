@@ -79,7 +79,7 @@ Rune mode uses the same `render` and `sampling` sections, but requires `output.f
 
 Rune mode can also randomly choose maps from all numeric `*.img` map nodes in the MapleStory data. Explicit entries are always included first; `random.count` adds that many additional maps and excludes duplicate explicit IDs. Add `seed` when you need repeatable selection.
 
-Use `maps.allMaps: true` to process every numeric `*.img` map node. Explicit `entries` are still included first and are not duplicated. `allMaps` cannot be combined with `maps.random`; geometry mode supports `allMaps` but not `random`.
+Use `maps.allMaps: true` to process every numeric `*.img` map node. In rendered modes, explicit `entries` are included first and are not duplicated. `allMaps` cannot be combined with `maps.random`; geometry mode supports `allMaps` but not `random`, and normalizes the combined explicit and discovered map IDs into numeric order.
 
 ```yaml
 mode: rune
