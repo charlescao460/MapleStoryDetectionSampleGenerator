@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MapleStory.Common;
+using WzComparerR2;
 using WzComparerR2.Common;
 using WzComparerR2.PluginBase;
 using WzComparerR2.WzLib;
@@ -392,21 +393,52 @@ namespace MapleStory.MachineLearningSampleGenerator
             int mapId,
             ISet<Wz_Image> extractedImages)
         {
-            Wz_Node canvasNode = miniMapNode.FindNodeByPath("canvas").GetLinkedSourceNode(PluginManager.FindWz);
+            Wz_Node canvasNode = ResolveMinimapCanvas(miniMapNode, mapId, PluginManager.FindWz);
             Wz_Image canvasImage = canvasNode?.GetNodeWzImage();
             if (canvasImage != null)
             {
                 extractedImages.Add(canvasImage);
             }
 
-            Wz_Png png = canvasNode.GetValueEx<Wz_Png>(null);
-            if (png == null)
+            Wz_Png png = RequireMinimapPng(canvasNode, mapId);
+            using var bitmap = png.ExtractPng();
+            bitmap.Save(path, ImageFormat.Png);
+        }
+
+        internal static Wz_Node ResolveMinimapCanvas(
+            Wz_Node miniMapNode,
+            int mapId,
+            GlobalFindNodeFunction findNode)
+        {
+            Wz_Node declaredCanvas = miniMapNode?.FindNodeByPath("canvas");
+            if (declaredCanvas == null)
             {
                 throw new UnsupportedMapGeometryException(mapId, "has no minimap canvas image");
             }
 
-            using var bitmap = png.ExtractPng();
-            bitmap.Save(path, ImageFormat.Png);
+            Wz_Node canvasNode = declaredCanvas.GetLinkedSourceNode(findNode);
+            if (canvasNode == null)
+            {
+                string linkPath = declaredCanvas.Nodes["source"].GetValueEx<string>(null)
+                    ?? declaredCanvas.Nodes["_inlink"].GetValueEx<string>(null)
+                    ?? declaredCanvas.Nodes["_outlink"].GetValueEx<string>(null);
+                throw new InvalidDataException(
+                    $"Map {mapId.ToString(CultureInfo.InvariantCulture)} minimap canvas link '{linkPath}' could not be resolved.");
+            }
+
+            return canvasNode;
+        }
+
+        internal static Wz_Png RequireMinimapPng(Wz_Node canvasNode, int mapId)
+        {
+            Wz_Png png = canvasNode.GetValueEx<Wz_Png>(null);
+            if (png == null)
+            {
+                throw new InvalidDataException(
+                    $"Map {mapId.ToString(CultureInfo.InvariantCulture)} minimap canvas does not contain PNG image data.");
+            }
+
+            return png;
         }
 
         private static int ParseMapId(string rawMapId)

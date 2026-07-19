@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
 using WzComparerR2;
@@ -263,6 +264,7 @@ namespace MapleStory.Common
                 return false;
             }
 
+            Exception extractionError = null;
             foreach (Wz_Node wzFileNode in preSearch)
             {
                 Wz_Node searchNode = wzFileNode;
@@ -284,7 +286,15 @@ namespace MapleStory.Common
                     Wz_Image img = searchNode.GetValueEx<Wz_Image>(null);
                     if (img != null)
                     {
-                        searchNode = img.TryExtract() ? img.Node : null;
+                        try
+                        {
+                            searchNode = RequireExtractedImageNode(img);
+                        }
+                        catch (Exception ex)
+                        {
+                            extractionError ??= ex;
+                            searchNode = null;
+                        }
                     }
                 }
 
@@ -296,7 +306,27 @@ namespace MapleStory.Common
                 }
             }
 
+            if (extractionError != null)
+            {
+                ExceptionDispatchInfo.Capture(extractionError).Throw();
+            }
+
             return false;
+        }
+
+        internal static Wz_Node RequireExtractedImageNode(Wz_Image image)
+        {
+            if (image == null)
+            {
+                throw new ArgumentNullException(nameof(image));
+            }
+
+            if (image.TryExtract(out Exception extractError))
+            {
+                return image.Node;
+            }
+
+            throw extractError ?? new InvalidDataException($"Failed to extract WZ image '{image.Name}'.");
         }
     }
 }

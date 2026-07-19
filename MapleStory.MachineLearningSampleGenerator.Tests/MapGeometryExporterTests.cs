@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using MapleStory.Common;
 using MapleStory.MachineLearningSampleGenerator;
 using WzComparerR2.WzLib;
 using Xunit;
@@ -92,6 +93,23 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
                     () => MapGeometryExporter.ExtractMapImage(image, 410000520));
 
                 Assert.Contains("Failed to extract map 410000520", exception.Message);
+            }
+            finally
+            {
+                image.Unextract();
+            }
+        }
+
+        [Fact]
+        public void RequireExtractedImageNode_PreservesChecksumFailure()
+        {
+            Wz_Image image = new InvalidChecksumWzImage();
+            try
+            {
+                ArgumentException exception = Assert.Throws<ArgumentException>(
+                    () => WzContext.RequireExtractedImageNode(image));
+
+                Assert.Equal("checksum error", exception.Message);
             }
             finally
             {
@@ -204,6 +222,47 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         }
 
         [Fact]
+        public void ResolveMinimapCanvas_PreservesLinkedResolverFailure()
+        {
+            Wz_Node miniMapNode = new Wz_Node("miniMap");
+            Wz_Node canvasNode = miniMapNode.Nodes.Add("canvas");
+            canvasNode.Nodes.Add("source").Value = "Map/Map/Map4/410000520.img/miniMap/canvas";
+            InvalidDataException resolverFailure = new InvalidDataException("linked image extraction failed");
+
+            InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+                MapGeometryExporter.ResolveMinimapCanvas(
+                    miniMapNode,
+                    410000520,
+                    _ => throw resolverFailure));
+
+            Assert.Same(resolverFailure, exception);
+        }
+
+        [Fact]
+        public void ResolveMinimapCanvas_RejectsMissingLinkedTargetAsInvalidData()
+        {
+            Wz_Node miniMapNode = new Wz_Node("miniMap");
+            Wz_Node canvasNode = miniMapNode.Nodes.Add("canvas");
+            canvasNode.Nodes.Add("_outlink").Value = "Map/Map/Map4/410000520.img/miniMap/canvas";
+
+            InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+                MapGeometryExporter.ResolveMinimapCanvas(miniMapNode, 410000520, _ => null));
+
+            Assert.Contains("could not be resolved", exception.Message);
+        }
+
+        [Fact]
+        public void RequireMinimapPng_RejectsMalformedCanvasAsInvalidData()
+        {
+            Wz_Node canvasNode = new Wz_Node("canvas");
+
+            InvalidDataException exception = Assert.Throws<InvalidDataException>(() =>
+                MapGeometryExporter.RequireMinimapPng(canvasNode, 410000520));
+
+            Assert.Contains("does not contain PNG image data", exception.Message);
+        }
+
+        [Fact]
         public void ReadMapNames_ReadsOnlyMapImageHierarchy()
         {
             Wz_Node mapStringRoot = new Wz_Node("Map.img");
@@ -275,13 +334,26 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
             }
         }
 
+        private sealed class InvalidChecksumWzImage : Wz_Image
+        {
+            public InvalidChecksumWzImage()
+                : base("linked.img", 1, 1, 0, 0, new InMemoryMapleStoryFile(false))
+            {
+            }
+
+            public override Stream OpenRead()
+            {
+                return new MemoryStream(new byte[] { 0x00 });
+            }
+        }
+
         private sealed class InMemoryMapleStoryFile : IMapleStoryFile
         {
-            public InMemoryMapleStoryFile()
+            public InMemoryMapleStoryFile(bool imgCheckDisabled = true)
             {
                 WzStructure = new Wz_Structure
                 {
-                    ImgCheckDisabled = true,
+                    ImgCheckDisabled = imgCheckDisabled,
                 };
             }
 
