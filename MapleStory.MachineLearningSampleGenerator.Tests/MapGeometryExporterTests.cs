@@ -154,6 +154,44 @@ namespace MapleStory.MachineLearningSampleGenerator.Tests
         }
 
         [Fact]
+        public void ExportMaps_CreatesStagingBesideOutputWithTrailingSeparator()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            string output = Path.Combine(workspace.RootPath, "output") + Path.DirectorySeparatorChar;
+            string deletedStagingDirectory = null;
+            MapGeometryExporter exporter = new MapGeometryExporter(
+                workspace.RootPath,
+                Encoding.UTF8,
+                (path, recursive) =>
+                {
+                    deletedStagingDirectory = path;
+                    Directory.Delete(path, recursive);
+                },
+                TextWriter.Null);
+
+            Assert.Throws<ArgumentException>(() => exporter.ExportMaps(
+                new[] { "410000520" },
+                output));
+
+            Assert.Equal(workspace.RootPath, Path.GetDirectoryName(deletedStagingDirectory));
+        }
+
+        [Fact]
+        public void ExportMaps_RejectsFileSystemRootOutputDirectory()
+        {
+            using TestWorkspace workspace = new TestWorkspace();
+            string root = Path.GetPathRoot(workspace.RootPath);
+            MapGeometryExporter exporter = new MapGeometryExporter(workspace.RootPath, Encoding.UTF8);
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(() => exporter.ExportMaps(
+                new[] { "410000520" },
+                root));
+
+            Assert.Equal("outputDirectory", exception.ParamName);
+            Assert.Contains("filesystem root", exception.Message);
+        }
+
+        [Fact]
         public void ExportMaps_PreservesContextFailureWhenCleanupAlsoFails()
         {
             using TestWorkspace workspace = new TestWorkspace();

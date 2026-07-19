@@ -70,8 +70,14 @@ namespace MapleStory.MachineLearningSampleGenerator
                 throw new InvalidOperationException("At least one map id is required.");
             }
 
-            string fullOutputPath = Path.GetFullPath(outputDirectory);
+            string fullOutputPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputDirectory));
             string outputParent = Path.GetDirectoryName(fullOutputPath);
+            if (string.IsNullOrEmpty(outputParent))
+            {
+                throw new ArgumentException(
+                    "Output directory cannot be a filesystem root.",
+                    nameof(outputDirectory));
+            }
             string stagingDirectory = Path.Combine(
                 outputParent,
                 ".hecate-map-pack-" + Guid.NewGuid().ToString("N"));
